@@ -73,8 +73,10 @@ namespace Pl {
                 }
             }
         } else {
-            targetHookPairs[trace->DebugRegister()] = std::pair<std::byte*, std::byte*>(nullptr, nullptr);
-            trace = nullptr;
+            if (trace) {
+                targetHookPairs[trace->DebugRegister()] = std::pair<std::byte*, std::byte*>(nullptr, nullptr);
+                trace = nullptr;
+            }
             // Check to see if no more hooks are set and the veh may be removed
             auto count{
                 std::accumulate(targetHookPairs.begin(), targetHookPairs.end(), 0, [](size_t count, const std::pair<std::byte*, std::byte*>& targetHookPair) {
@@ -82,6 +84,9 @@ namespace Pl {
                 })
             };
             applied = (count == 0) ? !RemoveVectoredExceptionHandler(vehHandle) : false;
+            if (!applied) {
+                vehHandle = nullptr;
+            }
         }
     }
 
@@ -98,8 +103,6 @@ namespace Pl {
 #else
     #error Perfect-loader is only supported for x86 and x64 processors.
 #endif
-                    // Set the resume flag (RF)
-                    contextRecord->EFlags |= 0x10000;
                     return EXCEPTION_CONTINUE_EXECUTION;
                 }
             }
@@ -116,7 +119,7 @@ namespace Pl {
             // Identify if one of the 4 available breakpoints is not already being used
             // The check is done by inspecting the local and global level set bits for each register
             for (reg = 0; reg < 4; reg++) {
-                if ((context.Dr7 & (reg * 2)) == 0 && (context.Dr7 & (1 << (reg * 2))) == 0)
+                if ((context.Dr7 & (3 << (reg * 2))) == 0)
                     break;
             }
             if (reg < 4) {

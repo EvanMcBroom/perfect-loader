@@ -58,9 +58,11 @@ namespace Pl {
     /// </summary>
     class Detour : public HookBase {
     public:
-        Detour(std::byte* target, std::byte* hook)
+        Detour(std::byte* target, std::byte* hook, bool enabled = true)
             : HookBase(target, hook) {
-            Enable(true);
+            if (enabled) {
+                Enable(true);
+            }
         }
         ~Detour() {
             if (applied) {
@@ -113,9 +115,11 @@ namespace Pl {
     /// </summary>
     class HbpHook : public HookBase {
     public:
-        HbpHook::HbpHook(std::byte* target, std::byte* hook)
+        HbpHook::HbpHook(std::byte* target, std::byte* hook, bool enabled = true)
             : HookBase(target, hook) {
-            Enable(true);
+            if (enabled) {
+                Enable(true);
+            }
         }
         ~HbpHook() {
             if (applied) {
@@ -138,12 +142,12 @@ namespace Pl {
     /// </summary>
     class Hook {
     public:
-        Hook(std::byte* target, std::byte* hook, bool useHbp = false)
+        Hook(std::byte* target, std::byte* hook, bool useHbp = false, bool enabled = true)
             : useHbp(useHbp) {
             if (useHbp) {
-                hbpHook = std::make_unique<HbpHook>(target, hook);
+                hbpHook = std::make_unique<HbpHook>(target, hook, enabled);
             } else {
-                detour = std::make_unique<Detour>(target, hook);
+                detour = std::make_unique<Detour>(target, hook, enabled);
             }
         }
 

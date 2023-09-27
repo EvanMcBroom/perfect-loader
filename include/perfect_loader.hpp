@@ -81,6 +81,7 @@ namespace Pl {
         static std::unique_ptr<Hook> ntCreateSectionHook;
         static std::unique_ptr<Hook> ntMapViewOfSectionHook;
         static std::unique_ptr<Hook> ntOpenFileHook;
+        static std::unique_ptr<Hook> ntQueryInformationThreadHook;
 
         // Ensure only 1 instance of the class is instantiated at a time
         // Do not use the normal singleton pattern because it'd cause LoadLibraryRedirector to always be instantiated
@@ -92,6 +93,24 @@ namespace Pl {
         static NTSTATUS NTAPI NtCreateSectionHook(PHANDLE SectionHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PLARGE_INTEGER MaximumSize, ULONG SectionPageProtection, ULONG AllocationAttributes, HANDLE FileHandle);
         static NTSTATUS NTAPI NtOpenFileHook(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PIO_STATUS_BLOCK IoStatusBlock, ULONG ShareAccess, ULONG OpenOptions);
         static NTSTATUS NTAPI NtMapViewOfSectionHook(HANDLE SectionHandle, HANDLE ProcessHandle, PVOID* BaseAddress, ULONG_PTR ZeroBits, SIZE_T CommitSize, PLARGE_INTEGER SectionOffset, PSIZE_T ViewSize, SECTION_INHERIT InheritDisposition, ULONG AllocationType, ULONG Win32Protect);
+
+        /// <remarks>
+        ///     Windows 10 implemented parallel loading which will cause useHbp to fail.
+        ///
+        ///     The root cause of the failure is:
+        ///     - LdrpMinimalMapModule will check LdrpMapAndSnapWork to see if parallel loading is enabled
+        ///     - If so, LdrpMinimalMapModule will call LdrpCheckForRetryLoading
+        ///     - LdrpCheckForRetryLoading will unmap our supplied section view and attempt to remap it using a legitimate section object, causing failure
+        ///
+        ///     Parallel loading is not an issue when memory patching is used because LdrpDetectDetour is called during the loading process,
+        ///     will detect the patch, and will conveniently unset LdrpMapAndSnapWork. That function will also unset LdrpMapAndSnapWork if the
+        ///     ThreadDynamicCodePolicyInfo for the thread is set to 1. Although I had issues setting that value with NtSetInformationThread,
+        ///     we may hook NtQueryInformationThreadHook to have that required value be reported which will unset LdrpMapAndSnapWork.
+        ///     
+        ///     Although described for a different reason, Peter Winter-Smith documents the parallel loader well:
+        ///     https://www.mdsec.co.uk/2022/01/edr-parallel-asis-through-analysis/
+        /// </remarks>
+        static NTSTATUS NTAPI NtQueryInformationThreadHook(HANDLE ThreadHandle, THREADINFOCLASS ThreadInformationClass, PVOID ThreadInformation, ULONG ThreadInformationLength, PULONG ReturnLength);
     };
 
     /// <summary>Disable thread attach and detachs callbacks for a module.</summary>

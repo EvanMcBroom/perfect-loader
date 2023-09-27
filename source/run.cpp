@@ -25,7 +25,7 @@ int wmain(int argc, wchar_t** argv) {
     if (argc > 1) {
         std::wstring fileName{ L"C:\\Program Files (x86)\\Windows Defender\\MpClient.dll" };
         auto bytes{ ReadFile(argv[1]) };
-        auto library = Pl::LoadLibrary(fileName, bytes);
+        auto library = Pl::LoadLibrary(fileName, bytes, Pl::UseHbp);
         std::wcout << L"Loaded module at address: 0x" << library << std::endl;
         Sleep(5000);
     } else {

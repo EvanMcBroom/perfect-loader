@@ -29,6 +29,9 @@
 #include <stack>
 #include <string>
 
+#include <iostream>
+#include <processthreadsapi.h>
+
 namespace Pl {
     // Static member variable definitions
     std::byte* LoadLibraryRedirector::baseAddress = nullptr;
@@ -40,6 +43,7 @@ namespace Pl {
     std::unique_ptr<Hook> LoadLibraryRedirector::ntCreateSectionHook;
     std::unique_ptr<Hook> LoadLibraryRedirector::ntMapViewOfSectionHook;
     std::unique_ptr<Hook> LoadLibraryRedirector::ntOpenFileHook;
+    std::unique_ptr<Hook> LoadLibraryRedirector::ntQueryInformationThreadHook;
     bool LoadLibraryRedirector::redirectSection = false;
     HANDLE LoadLibraryRedirector::section = INVALID_HANDLE_VALUE;
     HANDLE LoadLibraryRedirector::transaction = INVALID_HANDLE_VALUE;
@@ -50,6 +54,22 @@ namespace Pl {
         // Setup the information that may be used by the hooks
         useHbp = flags & LoadFlags::UseHbp;
         useTxf = flags & LoadFlags::UseTxf;
+        bool enableMainHooks{ true };
+        // Get OS version info
+        PL_LAZY_LOAD_KERNEL_AND_PROC(RtlGetVersion);
+        RTL_OSVERSIONINFOW versionInfo = { 0 };
+        if (LazyNtoskrnl) {
+            LazyRtlGetVersion(&versionInfo);
+            (void)FreeLibrary(LazyNtoskrnl);
+        }
+        // Chech for if useHbp was requested and this platform supports parallel loading (NT > 10)
+        if (useHbp && versionInfo.dwMajorVersion >= 10) {
+            // If so, NtQueryInformationThread needs to be handled first to disable parallel loading
+            // Then the main hooks may be enabled
+            PL_LAZY_LOAD_NATIVE_PROC(NtQueryInformationThread);
+            ntQueryInformationThreadHook = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtQueryInformationThread), reinterpret_cast<std::byte*>(NtQueryInformationThreadHook), useHbp);
+            enableMainHooks = false;
+        }
         if (useTxf) {
             this->libraryBytes = bytes;
         } else {
@@ -60,11 +80,11 @@ namespace Pl {
         // Setup the hooks
         PL_LAZY_LOAD_NATIVE_PROC(NtMapViewOfSection);
         PL_LAZY_LOAD_NATIVE_PROC(NtOpenFile);
-        ntMapViewOfSectionHook = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtMapViewOfSection), reinterpret_cast<std::byte*>(NtMapViewOfSectionHook), useHbp);
-        ntOpenFileHook = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtOpenFile), reinterpret_cast<std::byte*>(NtOpenFileHook), useHbp);
+        ntMapViewOfSectionHook = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtMapViewOfSection), reinterpret_cast<std::byte*>(NtMapViewOfSectionHook), useHbp, enableMainHooks);
+        ntOpenFileHook = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtOpenFile), reinterpret_cast<std::byte*>(NtOpenFileHook), useHbp, enableMainHooks);
         if (useTxf) {
             PL_LAZY_LOAD_NATIVE_PROC(NtCreateSection);
-            ntCreateSectionHook = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtCreateSection), reinterpret_cast<std::byte*>(NtCreateSectionHook), useHbp);
+            ntCreateSectionHook = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtCreateSection), reinterpret_cast<std::byte*>(NtCreateSectionHook), useHbp, enableMainHooks);
         }
     }
 
@@ -152,6 +172,28 @@ namespace Pl {
         }
     }
 
+    NTSTATUS NTAPI LoadLibraryRedirector::NtQueryInformationThreadHook(HANDLE ThreadHandle, THREADINFOCLASS ThreadInformationClass, PVOID ThreadInformation, ULONG ThreadInformationLength, PULONG ReturnLength) {
+        ntQueryInformationThreadHook->Enable(false);
+        auto ThreadDynamicCodePolicyInfo{ static_cast<THREADINFOCLASS>(42) };
+        if (ThreadInformationClass != ThreadDynamicCodePolicyInfo) {
+            // Although this hook may technically query a seperate thread if a psuedo thread handle was used that's ok for our purposes
+            PL_LAZY_LOAD_NATIVE_PROC(NtQueryInformationThread);
+            auto status{ LazyNtQueryInformationThread(ThreadHandle, ThreadInformationClass, ThreadInformation, ThreadInformationLength, ReturnLength) };
+            ntQueryInformationThreadHook->Enable(true);
+            return status;
+        } else {
+            *reinterpret_cast<DWORD*>(ThreadInformation) = 1;
+            if (ReturnLength) {
+                *ReturnLength = ThreadInformationLength;
+            }
+            ntMapViewOfSectionHook->Enable(true);
+            ntOpenFileHook->Enable(true);
+            if (useTxf) {
+                ntCreateSectionHook->Enable(true);
+            }
+            return 0;
+        }
+    }
     bool DisableThreadCallbacks(std::byte* peBase) {
         __try {
             auto ldrDataTableEntry{ GetLdrDataTableEntry(peBase) };

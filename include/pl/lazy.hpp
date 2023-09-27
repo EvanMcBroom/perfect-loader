@@ -40,13 +40,18 @@ namespace Pl {
     }
 }
 
+#define PL_LAZY_LOAD_KERNEL_AND_PROC(PROC) \
+    HMODULE LazyNtoskrnl;                  \
+    decltype(PROC)* Lazy##PROC;            \
+    std::tie(LazyNtoskrnl, Lazy##PROC) = Pl::LazyLoad<decltype(PROC)>(L"ntoskrnl.exe", #PROC);
+
 #define PL_LAZY_LOAD_NATIVE_PROC(PROC) \
     auto Lazy##PROC{ Pl::LazyLoad<decltype(PROC)>(GetModuleHandleW(L"ntdll.dll"), #PROC) };
 
 #define PL_LAZY_LOAD_LIBRARY_AND_PROC(LIBRARY, PROC) \
     HMODULE Lazy##LIBRARY;                           \
     decltype(PROC)* Lazy##PROC;                      \
-    std::tie(Lazy##LIBRARY, Lazy##PROC) = Pl::LazyLoad<decltype(PROC)>(_CRT_WIDE(LIBRARY##.dll), #PROC);
+    std::tie(Lazy##LIBRARY, Lazy##PROC) = Pl::LazyLoad<decltype(PROC)>(_CRT_WIDE(_CRT_STRINGIZE(LIBRARY##.dll)), #PROC);
 
 #define PL_LAZY_LOAD_PROC(LIBRARY, PROC) \
     auto Lazy##PROC{ Pl::LazyLoad<decltype(PROC)>(LIBRARY, #PROC) };
