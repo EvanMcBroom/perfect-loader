@@ -162,7 +162,7 @@ namespace Pl {
     /// <seealso cref="LockLoaderLock"/>
     inline auto LockLoaderLock() noexcept {
         PL_LAZY_LOAD_NATIVE_PROC(LdrLockLoaderLock);
-        size_t cookie;
+        SIZE_T cookie;
         return (NT_SUCCESS(LazyLdrLockLoaderLock(0, nullptr, &cookie))) ? cookie : 0;
     }
 

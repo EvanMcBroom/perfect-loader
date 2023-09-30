@@ -188,7 +188,7 @@ namespace Pl {
             // ret
             trampoline.data()[0] = 0x68;
             *reinterpret_cast<uint32_t*>(&trampoline.data()[1]) = (uint32_t)hook;
-            trampoline.data()[5] = 0x68;
+            trampoline.data()[5] = 0xc3;
         }
         return trampoline;
     }
