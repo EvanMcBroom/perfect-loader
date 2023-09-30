@@ -3,8 +3,8 @@
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat)](LICENSE.txt)
 
 A reference implementation of a perfect in-memory dynamic library loader for Windows.
-The implementation may be considered perfect because it does not reimplement `LoadLibrary`, an approach that will inherently cause an incomplete solution.
-Rather, the implementation redirects `LoadLibrary` to use in-memory data, causing a solution that will always have feature parity with the native OS loader.
+The implementation may be considered perfect because it does not reimplement `LoadLibrary`, an approach that is inherently incomplete.
+Rather, the implementation redirects `LoadLibrary` to use in-memory data, creating a solution that will always have feature parity with the native Windows loader.
 
 The project implements two solutions for redirecting `LoadLibrary`.
 The first is based off of [A-Normal-User](https://github.com/A-Normal-User)'s [excellent work](https://github.com/A-Normal-User/MemoryDll-DllRedirect) of redirecting `LoadLibrary` by placing hooks on `NtOpenFile` and `NtMapViewOfSection`.
@@ -13,11 +13,20 @@ Although redirecting `LoadLibrary` by placing hooks on native functions has been
 [has a similar approach](https://github.com/rbmm/Load) which only requires one hook, but it was not used because it requires creating a file.
 
 The second solution uses a similar method to [Process Doppelgänging](https://www.blackhat.com/docs/eu-17/materials/eu-17-Liberman-Lost-In-Transaction-Process-Doppelganging.pdf) of updating an opened file in a transaction and using it to create a section object.
-The solution differs from [Tal Liberman](https://twitter.com/Tal_Liberman) and Eugene Kogan's work by redirecting `LoadLibrary` to use the section instead of using the section to create a new process or thread.
+The solution differs from [Tal Liberman](https://twitter.com/Tal_Liberman) and [Eugene Kogan](https://twitter.com/eukogan)'s work by redirecting `LoadLibrary` to use the section instead of using the section to create a new process or thread.
+To my knowledge, this is a novel approach to using transactions and I personally refer to it as Module Doppelgänging to acknowledge Tal and Eugene's prior work.
 
-To my knowledge this is a novel approach to using transactions.
-Accordingly, it needs a name to reference it in conversation.
-I personally refer to the the approach as Module Doppelgänging to acknowledges [Tal Liberman](https://twitter.com/Tal_Liberman) and Eugene Kogan's prior work and I encourage others to do the same.
+## Features
+
+- x86 and x64 support
+- Reflectively inject module using manual mapping or Module Doppelgänging
+- Hooking using patching or hardware breakpoints
+- Disable module load notifications
+- Unlink module from loader lists
+- Remove or overwrite module headers
+- Disable thread callbacks for a module
+
+> :pencil2: The Module Doppelgänging and hardware breakpoint options for injecting a module are currently not supported on WoW64 processes.
 
 ## Building
 
