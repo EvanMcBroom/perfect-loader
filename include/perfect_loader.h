@@ -56,7 +56,6 @@
 /// </param>
 /// <param name='FileName'>
 ///     Refer to the Pl::LoadLibrary documentation for detailed information.
-///     If no value is supplied then an empty temporary file will be created and its path will be used.
 /// </param>
 /// <param name='PlFlags'>
 ///     The approach and post processing options for loading the module.
