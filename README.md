@@ -40,7 +40,14 @@ cmake .. -A {Win32 | x64}
 cmake --build .
 ```
 
-By default CMake will build both the `perfect-loader` static library it uses, an example utility named `run` which uses the library, and a dynamic library named `testdll` which may be used with the example.
+By default CMake will build the following:
+
+| Artifact | Description |
+| --- | --- |
+| `perfect-loader.lib` | The main static library for the project |
+| `pl.dll` | A DLL that exposes the functionality of the project as a single exported C API |
+| `run.exe` | An example utility which uses the library to load a DLL from memory |
+| `testdll.dll` | An example DLL which may be used with the `run.exe` utility |
 
 Other CMake projects may use perfect loader by calling `include` on this directory from an overarching project's `CMakeLists.txt` files.
-Doing so will add the static library as a CMake target in the overarching project but will not add the `run` utility or the `testdll` library.
+Doing so will add the static library and the shared library with the C API as CMake targets in the overarching project but will not add the `run` utility or the `testdll` library.

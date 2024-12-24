@@ -20,7 +20,6 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 add_library(${PROJECT_NAME} STATIC)
 target_sources(${PROJECT_NAME} PRIVATE
-    include/perfect_loader.h
     include/perfect_loader.hpp
     include/pl/hook.hpp
     include/pl/lazy.hpp
