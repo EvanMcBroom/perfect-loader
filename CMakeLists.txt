@@ -3,13 +3,15 @@ project(perfect-loader
     VERSION "1.0"
     DESCRIPTION "A perfect loader implementation"
     HOMEPAGE_URL "https://github.com/EvanMcBroom/perfect-loader"
-    LANGUAGES CXX
+    LANGUAGES C CXX
 )
 if (${CMAKE_PROJECT_NAME} STREQUAL ${PROJECT_NAME})
     set(MAIN_PROJECT TRUE)
+    set(CLIB pl)
 else()
     set(MAIN_PROJECT FALSE)
     set(PROJECT_NAME library_perfect_loader)
+    set(CLIB library_pl)
 endif()
 
 set(CMAKE_CXX_STANDARD 17)
@@ -18,6 +20,7 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 add_library(${PROJECT_NAME} STATIC)
 target_sources(${PROJECT_NAME} PRIVATE
+    include/perfect_loader.h
     include/perfect_loader.hpp
     include/pl/hook.hpp
     include/pl/lazy.hpp
@@ -26,6 +29,10 @@ target_sources(${PROJECT_NAME} PRIVATE
     include/pl/types.hpp
 )
 target_include_directories(${PROJECT_NAME} PUBLIC include)
+
+add_library(${CLIB} SHARED)
+target_sources(${CLIB} PRIVATE include/perfect_loader.h)
+target_link_libraries(${CLIB} PRIVATE ${PROJECT_NAME})
 
 if (${MAIN_PROJECT})
     add_executable(run)
