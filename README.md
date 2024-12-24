@@ -10,8 +10,8 @@ The project implements two solutions for redirecting `LoadLibrary`.
 The first is based off of [A-Normal-User](https://github.com/A-Normal-User)'s [excellent work](https://github.com/A-Normal-User/MemoryDll-DllRedirect) of redirecting `LoadLibrary` by placing hooks on `NtOpenFile` and `NtMapViewOfSection`.
 Although redirecting `LoadLibrary` by placing hooks on native functions has been previously documented in various malware reports, [A-Normal-User](https://github.com/A-Normal-User)'s approach is unique in that it only requires two hooks.
 [Alex Short](https://twitter.com/alexsho71327477) also 
-[has a similar approach](https://github.com/rbmm/Load) that only requires one hook.
-Alex's approach does require you to identify a library without CFG that is larger than the in-memory library you intend to load, but he shows how to easily find such a library in his function [FindNoCfgDll](https://github.com/rbmm/Load/blob/main/loadmem.cpp#L61C10-L61C22).
+[has a similar approach](https://github.com/rbmm/ARL/tree/main/Load) that only requires one hook.
+Alex's approach does require you to identify a library without CFG that is larger than the in-memory library you intend to load, but he shows how to easily find such a library in his function [FindNoCfgDll](https://github.com/rbmm/ARL/blob/fab3ee614702f81ce63f97c3f915c7ecf06e3ed8/Load/loadmem.cpp#L99).
 
 The second solution uses a similar method to [Process Doppelgänging](https://www.blackhat.com/docs/eu-17/materials/eu-17-Liberman-Lost-In-Transaction-Process-Doppelganging.pdf) of updating an opened file in a transaction and using it to create a section object.
 The solution differs from [Tal Liberman](https://twitter.com/Tal_Liberman) and [Eugene Kogan](https://twitter.com/eukogan)'s work by redirecting `LoadLibrary` to use the section instead of using the section to create a new process or thread.
