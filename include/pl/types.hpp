@@ -19,7 +19,7 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
-
+//
 #pragma once
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -28,24 +28,9 @@
 #define LDRP_DONT_CALL_FOR_THREADS 0x00040000
 #define STATUS_IMAGE_NOT_AT_BASE   0x40000003
 
-typedef enum _SECTION_INHERIT {
-    ViewShare = 1,
-    ViewUnmap = 2
-} SECTION_INHERIT;
-
-typedef VOID(NTAPI* PLDR_DLL_NOTIFICATION_FUNCTION)(ULONG NotificationReason, PVOID NotificationData, PVOID Context);
-
-[[maybe_unused]] NTSTATUS NTAPI LdrLockLoaderLock(ULONG Flags, ULONG* State, SIZE_T* Cookie);
-[[maybe_unused]] NTSTATUS NTAPI LdrRegisterDllNotification(ULONG Flags, PLDR_DLL_NOTIFICATION_FUNCTION NotificationFunction, PVOID Context, PVOID* Cookie);
-[[maybe_unused]] NTSTATUS NTAPI LdrUnlockLoaderLock(ULONG Flags, SIZE_T Cookie);
-[[maybe_unused]] NTSTATUS NTAPI LdrUnregisterDllNotification(PVOID Cookie);
-[[maybe_unused]] NTSTATUS NTAPI NtCreateSection(PHANDLE SectionHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PLARGE_INTEGER MaximumSize, ULONG SectionPageProtection, ULONG AllocationAttributes, HANDLE FileHandle);
-[[maybe_unused]] NTSTATUS NTAPI NtMapViewOfSection(HANDLE SectionHandle, HANDLE ProcessHandle, PVOID* BaseAddress, ULONG_PTR ZeroBits, SIZE_T CommitSize, PLARGE_INTEGER SectionOffset, PSIZE_T ViewSize, SECTION_INHERIT InheritDisposition, ULONG AllocationType, ULONG Win32Protect);
-[[maybe_unused]] NTSTATUS NTAPI NtQueryInformationThread(HANDLE ThreadHandle, THREADINFOCLASS ThreadInformationClass, PVOID ThreadInformation, ULONG ThreadInformationLength, PULONG ReturnLength);
-[[maybe_unused]] NTSTATUS NTAPI RtlGetVersion(PRTL_OSVERSIONINFOW lpVersionInformation);
-[[maybe_unused]] BOOL NTAPI RtlSetCurrentTransaction(HANDLE Transaction);
-
 namespace Pl {
+    typedef VOID(NTAPI* PLDR_DLL_NOTIFICATION_FUNCTION)(ULONG NotificationReason, PVOID NotificationData, PVOID Context);
+
     typedef struct _LDR_DATA_TABLE_ENTRY {
         LIST_ENTRY InLoadOrderLinks;
         LIST_ENTRY InMemoryOrderLinks;
@@ -73,6 +58,61 @@ namespace Pl {
         PLDR_DLL_NOTIFICATION_FUNCTION NotificationFunction;
         PVOID Context;
     } LDRP_DLL_NOTIFICATION_BLOCK, *PLDRP_DLL_NOTIFICATION_BLOCK;
+
+    typedef enum _SECTION_INFORMATION_CLASS {
+        SectionBasicInformation,
+        SectionImageInformation
+        // ...
+    } SECTION_INFORMATION_CLASS;
+
+    typedef enum _SECTION_INHERIT {
+        ViewShare = 1,
+        ViewUnmap = 2
+    } SECTION_INHERIT;
+
+    typedef struct _SECTION_IMAGE_INFORMATION {
+        PVOID TransferAddress;
+        ULONG ZeroBits;
+        SIZE_T MaximumStackSize;
+        SIZE_T CommittedStackSize;
+        ULONG SubSystemType;
+        union {
+            struct
+            {
+                USHORT SubSystemMinorVersion;
+                USHORT SubSystemMajorVersion;
+            };
+            ULONG SubSystemVersion;
+        };
+        union {
+            struct
+            {
+                USHORT MajorOperatingSystemVersion;
+                USHORT MinorOperatingSystemVersion;
+            };
+            ULONG OperatingSystemVersion;
+        };
+        USHORT ImageCharacteristics;
+        USHORT DllCharacteristics;
+        USHORT Machine;
+        BOOLEAN ImageContainsCode;
+        union {
+            UCHAR ImageFlags;
+            struct
+            {
+                UCHAR ComPlusNativeReady : 1;
+                UCHAR ComPlusILOnly : 1;
+                UCHAR ImageDynamicallyRelocated : 1;
+                UCHAR ImageMappedFlat : 1;
+                UCHAR BaseBelow4gb : 1;
+                UCHAR ComPlusPrefer32bit : 1;
+                UCHAR Reserved : 2;
+            };
+        };
+        ULONG LoaderFlags;
+        ULONG ImageFileSize;
+        ULONG CheckSum;
+    } SECTION_IMAGE_INFORMATION, *PSECTION_IMAGE_INFORMATION;
 
     typedef struct _PEB_LDR_DATA {
         ULONG Length;
@@ -106,4 +146,15 @@ namespace Pl {
         Pl::PPEB_LDR_DATA Ldr;
         // ...
     } PEB, *PPEB;
+
+    [[maybe_unused]] NTSTATUS NTAPI LdrLockLoaderLock(ULONG Flags, ULONG* State, SIZE_T* Cookie);
+    [[maybe_unused]] NTSTATUS NTAPI LdrRegisterDllNotification(ULONG Flags, PLDR_DLL_NOTIFICATION_FUNCTION NotificationFunction, PVOID Context, PVOID* Cookie);
+    [[maybe_unused]] NTSTATUS NTAPI LdrUnlockLoaderLock(ULONG Flags, SIZE_T Cookie);
+    [[maybe_unused]] NTSTATUS NTAPI LdrUnregisterDllNotification(PVOID Cookie);
+    [[maybe_unused]] NTSTATUS NTAPI NtCreateSection(PHANDLE SectionHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PLARGE_INTEGER MaximumSize, ULONG SectionPageProtection, ULONG AllocationAttributes, HANDLE FileHandle);
+    [[maybe_unused]] NTSTATUS NTAPI NtMapViewOfSection(HANDLE SectionHandle, HANDLE ProcessHandle, PVOID* BaseAddress, ULONG_PTR ZeroBits, SIZE_T CommitSize, PLARGE_INTEGER SectionOffset, PSIZE_T ViewSize, SECTION_INHERIT InheritDisposition, ULONG AllocationType, ULONG Win32Protect);
+    [[maybe_unused]] NTSTATUS NTAPI NtQueryInformationThread(HANDLE ThreadHandle, THREADINFOCLASS ThreadInformationClass, PVOID ThreadInformation, ULONG ThreadInformationLength, PULONG ReturnLength);
+    [[maybe_unused]] NTSTATUS NTAPI NtQuerySection(HANDLE SectionHandle, SECTION_INFORMATION_CLASS SectionInformationClass, PVOID SectionInformation, SIZE_T SectionInformationLength, PSIZE_T ReturnLength);
+    [[maybe_unused]] NTSTATUS NTAPI RtlGetVersion(PRTL_OSVERSIONINFOW lpVersionInformation);
+    [[maybe_unused]] BOOL NTAPI RtlSetCurrentTransaction(HANDLE Transaction);
 }

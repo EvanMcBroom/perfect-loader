@@ -10,7 +10,7 @@ if (${CMAKE_PROJECT_NAME} STREQUAL ${PROJECT_NAME})
     set(CLIB pl)
 else()
     set(MAIN_PROJECT FALSE)
-    set(PROJECT_NAME library_perfect_loader)
+    set(PROJECT_NAME "library_pl++")
     set(CLIB library_pl)
 endif()
 
@@ -35,7 +35,7 @@ target_link_libraries(${CLIB} PRIVATE ${PROJECT_NAME})
 
 if (${MAIN_PROJECT})
     add_executable(run)
-    target_link_libraries(run PRIVATE ${PROJECT_NAME})
+    target_link_libraries(run PRIVATE ${CLIB} ${PROJECT_NAME})
 
     add_library(testdll SHARED)
     target_link_libraries(testdll PRIVATE ${PROJECT_NAME})

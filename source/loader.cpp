@@ -19,7 +19,7 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
-
+//
 #include "perfect_loader.hpp"
 #include <algorithm>
 #include <fstream>
@@ -32,69 +32,66 @@
 #include <iostream>
 #include <processthreadsapi.h>
 
+namespace {
+    // Data used by loader options
+    std::wstring modListName;
+
+    // Data used by the manual mapping approach
+    LARGE_INTEGER fileSize;
+    std::byte* baseAddress = nullptr;
+    size_t mappedSize = 0;
+    std::unique_ptr<Pl::Hook> ntMapViewOfSectionHook;
+
+    // Data used by the manual process doppelgänging approach
+    std::wstring fileName;
+    std::vector<std::byte> libraryBytes;
+    std::unique_ptr<Pl::Hook> ntCreateSectionHook;
+    std::unique_ptr<Pl::Hook> ntOpenFileHook;
+    bool redirectCreateSection;
+    HANDLE transaction;
+}
+
 namespace Pl {
-    // Static member variable definitions
-    std::byte* LoadLibraryRedirector::baseAddress = nullptr;
-    std::wstring LoadLibraryRedirector::fileName;
     std::mutex LoadLibraryRedirector::lock;
-    std::vector<std::byte> LoadLibraryRedirector::libraryBytes;
-    size_t LoadLibraryRedirector::mappedSize = 0;
-    std::wstring LoadLibraryRedirector::modListName;
-    std::unique_ptr<Hook> LoadLibraryRedirector::ntCreateSectionHook;
-    std::unique_ptr<Hook> LoadLibraryRedirector::ntMapViewOfSectionHook;
-    std::unique_ptr<Hook> LoadLibraryRedirector::ntOpenFileHook;
-    std::unique_ptr<Hook> LoadLibraryRedirector::ntQueryInformationThreadHook;
-    bool LoadLibraryRedirector::redirectSection = false;
-    HANDLE LoadLibraryRedirector::section = INVALID_HANDLE_VALUE;
-    HANDLE LoadLibraryRedirector::transaction = INVALID_HANDLE_VALUE;
-    bool LoadLibraryRedirector::useHbp;
-    bool LoadLibraryRedirector::useTxf;
 
     LoadLibraryRedirector::LoadLibraryRedirector(std::wstring fileName, const std::vector<std::byte>& bytes, DWORD flags, const std::wstring& modListName) {
-        // Setup the information that may be used by the hooks
-        useHbp = flags & LoadFlags::UseHbp;
-        useTxf = flags & LoadFlags::UseTxf;
-        bool enableMainHooks{ true };
-        // Get OS version info
-        PL_LAZY_LOAD_KERNEL_AND_PROC(RtlGetVersion);
-        RTL_OSVERSIONINFOW versionInfo = { 0 };
-        if (LazyNtoskrnl) {
-            LazyRtlGetVersion(&versionInfo);
-            (void)FreeLibrary(LazyNtoskrnl);
-        }
-        // Chech for if useHbp was requested and this platform supports parallel loading (NT > 10)
-        if (useHbp && versionInfo.dwMajorVersion >= 10) {
-            // If so, NtQueryInformationThread needs to be handled first to disable parallel loading
-            // Then the main hooks may be enabled
-            PL_LAZY_LOAD_NATIVE_PROC(NtQueryInformationThread);
-            ntQueryInformationThreadHook = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtQueryInformationThread), reinterpret_cast<std::byte*>(NtQueryInformationThreadHook), useHbp);
-            enableMainHooks = false;
-        }
-        if (useTxf) {
-            this->libraryBytes = bytes;
-        } else {
-            MapModule(bytes, &this->baseAddress, &this->mappedSize);
-        }
-        this->fileName = fileName;
-        this->modListName = modListName;
-        // Setup the hooks
-        PL_LAZY_LOAD_NATIVE_PROC(NtMapViewOfSection);
-        PL_LAZY_LOAD_NATIVE_PROC(NtOpenFile);
-        ntMapViewOfSectionHook = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtMapViewOfSection), reinterpret_cast<std::byte*>(NtMapViewOfSectionHook), useHbp, enableMainHooks);
-        ntOpenFileHook = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtOpenFile), reinterpret_cast<std::byte*>(NtOpenFileHook), useHbp, enableMainHooks);
-        if (useTxf) {
+        ::modListName = modListName;
+        auto useHbp{ flags & LoadFlags::UseHbp };
+        if (flags & LoadFlags::UseTxf) {
+            ::fileName = fileName;
+            libraryBytes = bytes;
+            redirectCreateSection = false;
+            transaction = INVALID_HANDLE_VALUE;
             PL_LAZY_LOAD_NATIVE_PROC(NtCreateSection);
-            ntCreateSectionHook = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtCreateSection), reinterpret_cast<std::byte*>(NtCreateSectionHook), useHbp, enableMainHooks);
+            PL_LAZY_LOAD_NATIVE_PROC(NtOpenFile);
+            ntCreateSectionHook = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtCreateSection), reinterpret_cast<std::byte*>(NtCreateSectionHook), useHbp);
+            ntOpenFileHook = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtOpenFile), reinterpret_cast<std::byte*>(NtOpenFileHook), useHbp);
+        } else {
+            auto file{ CreateFileW(fileName.data(), FILE_READ_ATTRIBUTES, 0, nullptr, OPEN_ALWAYS, 0, nullptr) };
+            if (file == INVALID_HANDLE_VALUE) {
+                throw std::exception("Could not open the path specified in the fileName argument to LoadLibraryRedirector.");
+
+            }
+            (void)GetFileSizeEx(file, &fileSize);
+            CloseHandle(file);
+            if (!MapModule(bytes, &baseAddress, &mappedSize)) {
+                throw std::exception("Could not map the library specified in the bytes argument to LoadLibraryRedirector.");
+            }
+            PL_LAZY_LOAD_NATIVE_PROC(NtMapViewOfSection);
+            ntMapViewOfSectionHook = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtMapViewOfSection), reinterpret_cast<std::byte*>(NtMapViewOfSectionHook), useHbp);
         }
     }
 
     LoadLibraryRedirector::~LoadLibraryRedirector() {
         ntCreateSectionHook = nullptr;
-        ntMapViewOfSectionHook = nullptr;
         ntOpenFileHook = nullptr;
+        ntMapViewOfSectionHook = nullptr;
         PL_LAZY_LOAD_NATIVE_PROC(RtlSetCurrentTransaction);
-        LazyRtlSetCurrentTransaction(0);
-        RollbackTransaction(transaction);
+        if (transaction != INVALID_HANDLE_VALUE) {
+            LazyRtlSetCurrentTransaction(0);
+            RollbackTransaction(transaction);
+        }
+        libraryBytes.clear(); // Explicitly clear in case the in-memory dll is large
     }
 
     NTSTATUS NTAPI LoadLibraryRedirector::NtOpenFileHook(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PIO_STATUS_BLOCK IoStatusBlock, ULONG ShareAccess, ULONG OpenOptions) {
@@ -105,14 +102,14 @@ namespace Pl {
         std::wstring fileNameToOpen{ ObjectAttributes->ObjectName->Buffer };
         bool fileNameMatches{ std::equal(fileName.rbegin(), fileName.rend(), fileNameToOpen.rbegin()) };
         NTSTATUS status{ 0 };
-        if (useTxf && fileNameMatches) {
+        if (fileNameMatches) {
             // Open the requested file in a transaction and overwrite it
             transaction = CreateTransaction(nullptr, 0, 0, 0, 0, 0, nullptr);
             // Set the transaction manually because it needs to stay open until LoadLibrary completes
             PL_LAZY_LOAD_NATIVE_PROC(RtlSetCurrentTransaction);
             LazyRtlSetCurrentTransaction(transaction);
-            // Set modListName to the default of fileName if useTxf or modListName was not specified
-            if (!useTxf || modListName.empty()) {
+            // Set modListName to the default of fileName if modListName was not specified
+            if (::modListName.empty()) {
                 modListName = fileName;
             }
             HANDLE writer{ CreateFileW(modListName.data(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr) };
@@ -129,16 +126,11 @@ namespace Pl {
             }
             CloseHandle(writer);
             *FileHandle = CreateFileW(modListName.data(), GENERIC_READ, ShareAccess, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-            redirectSection = true;
+            redirectCreateSection = true;
         } else {
             // Open the requested file then re-enable the detour if its still needed
             status = LazyNtOpenFile(FileHandle, DesiredAccess, ObjectAttributes, IoStatusBlock, ShareAccess, OpenOptions);
-            if (fileNameMatches) {
-                redirectSection = true;
-                status = STATUS_IMAGE_NOT_AT_BASE;
-            } else {
-                ntOpenFileHook->Enable(true);
-            }
+            ntOpenFileHook->Enable(true);
         }
         return status;
     }
@@ -147,7 +139,7 @@ namespace Pl {
         ntCreateSectionHook->Enable(false);
         PL_LAZY_LOAD_NATIVE_PROC(NtCreateSection);
         NTSTATUS status;
-        if (redirectSection) {
+        if (redirectCreateSection) {
             status = LazyNtCreateSection(SectionHandle, SECTION_MAP_READ | SECTION_MAP_WRITE | SECTION_MAP_EXECUTE, nullptr, 0, PAGE_READONLY, SEC_IMAGE, FileHandle);
         } else {
             status = LazyNtCreateSection(SectionHandle, DesiredAccess, ObjectAttributes, MaximumSize, SectionPageProtection, AllocationAttributes, FileHandle);
@@ -157,43 +149,23 @@ namespace Pl {
     }
 
     NTSTATUS NTAPI LoadLibraryRedirector::NtMapViewOfSectionHook(HANDLE SectionHandle, HANDLE ProcessHandle, PVOID* BaseAddress, ULONG_PTR ZeroBits, SIZE_T CommitSize, PLARGE_INTEGER SectionOffset, PSIZE_T ViewSize, SECTION_INHERIT InheritDisposition, ULONG AllocationType, ULONG Win32Protect) {
-        ntMapViewOfSectionHook->Enable(false);
-        if (!redirectSection || (redirectSection && useTxf)) {
-            PL_LAZY_LOAD_NATIVE_PROC(NtMapViewOfSection);
-            auto status{ LazyNtMapViewOfSection(SectionHandle, ProcessHandle, BaseAddress, ZeroBits, CommitSize, SectionOffset, ViewSize, InheritDisposition, AllocationType, Win32Protect) };
-            if (!redirectSection) {
-                ntMapViewOfSectionHook->Enable(true);
+        PL_LAZY_LOAD_NATIVE_PROC(NtQuerySection);
+        SECTION_IMAGE_INFORMATION information = { 0 };
+        SIZE_T length;
+        if (NT_SUCCESS(LazyNtQuerySection(SectionHandle, SectionImageInformation, &information, sizeof(information), &length))) {
+            if (information.ImageFileSize == fileSize.QuadPart) {
+                *BaseAddress = baseAddress;
+                *ViewSize = mappedSize;
+                return STATUS_IMAGE_NOT_AT_BASE;
             }
-            return status;
-        } else {
-            *BaseAddress = baseAddress;
-            *ViewSize = mappedSize;
-            return STATUS_IMAGE_NOT_AT_BASE;
         }
+        ntMapViewOfSectionHook->Enable(false);
+        PL_LAZY_LOAD_NATIVE_PROC(NtMapViewOfSection);
+        auto status{ LazyNtMapViewOfSection(SectionHandle, ProcessHandle, BaseAddress, ZeroBits, CommitSize, SectionOffset, ViewSize, InheritDisposition, AllocationType, Win32Protect) };
+        ntMapViewOfSectionHook->Enable(true);
+        return status;
     }
 
-    NTSTATUS NTAPI LoadLibraryRedirector::NtQueryInformationThreadHook(HANDLE ThreadHandle, THREADINFOCLASS ThreadInformationClass, PVOID ThreadInformation, ULONG ThreadInformationLength, PULONG ReturnLength) {
-        ntQueryInformationThreadHook->Enable(false);
-        auto ThreadDynamicCodePolicyInfo{ static_cast<THREADINFOCLASS>(42) };
-        if (ThreadInformationClass != ThreadDynamicCodePolicyInfo) {
-            // Although this hook may technically query a seperate thread if a psuedo thread handle was used that's ok for our purposes
-            PL_LAZY_LOAD_NATIVE_PROC(NtQueryInformationThread);
-            auto status{ LazyNtQueryInformationThread(ThreadHandle, ThreadInformationClass, ThreadInformation, ThreadInformationLength, ReturnLength) };
-            ntQueryInformationThreadHook->Enable(true);
-            return status;
-        } else {
-            *reinterpret_cast<DWORD*>(ThreadInformation) = 1;
-            if (ReturnLength) {
-                *ReturnLength = ThreadInformationLength;
-            }
-            ntMapViewOfSectionHook->Enable(true);
-            ntOpenFileHook->Enable(true);
-            if (useTxf) {
-                ntCreateSectionHook->Enable(true);
-            }
-            return 0;
-        }
-    }
     bool DisableThreadCallbacks(std::byte* peBase) {
         __try {
             auto ldrDataTableEntry{ GetLdrDataTableEntry(peBase) };

@@ -19,7 +19,7 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
-
+//
 #pragma once
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -39,11 +39,6 @@ namespace Pl {
         return { library, (library) ? reinterpret_cast<Function*>(GetProcAddress(library, procName.data())) : nullptr };
     }
 }
-
-#define PL_LAZY_LOAD_KERNEL_AND_PROC(PROC) \
-    HMODULE LazyNtoskrnl;                  \
-    decltype(PROC)* Lazy##PROC;            \
-    std::tie(LazyNtoskrnl, Lazy##PROC) = Pl::LazyLoad<decltype(PROC)>(L"ntoskrnl.exe", #PROC);
 
 #define PL_LAZY_LOAD_NATIVE_PROC(PROC) \
     auto Lazy##PROC{ Pl::LazyLoad<decltype(PROC)>(GetModuleHandleW(L"ntdll.dll"), #PROC) };
