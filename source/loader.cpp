@@ -40,7 +40,9 @@ namespace {
     LARGE_INTEGER fileSize;
     std::byte* baseAddress = nullptr;
     size_t mappedSize = 0;
+    std::unique_ptr<Pl::Hook> ntManageHotPatch;
     std::unique_ptr<Pl::Hook> ntMapViewOfSectionHook;
+    std::unique_ptr<Pl::Hook> ntQueryVirtualMemoryHook;
 
     // Data used by the manual process doppelgänging approach
     std::wstring fileName;
@@ -54,6 +56,10 @@ namespace {
 namespace Pl {
     std::mutex LoadLibraryRedirector::lock;
 
+// Disables a warning that the constructor does not release a lock.
+// That is intended and the lock is released via RAII on deconstruction.
+#pragma warning(push)
+#pragma warning(disable : 26115)
     LoadLibraryRedirector::LoadLibraryRedirector(std::wstring fileName, const std::vector<std::byte>& bytes, DWORD flags, const std::wstring& modListName) {
         ::modListName = modListName;
         auto useHbp{ flags & LoadFlags::UseHbp };
@@ -70,22 +76,31 @@ namespace Pl {
             auto file{ CreateFileW(fileName.data(), FILE_READ_ATTRIBUTES, 0, nullptr, OPEN_ALWAYS, 0, nullptr) };
             if (file == INVALID_HANDLE_VALUE) {
                 throw std::exception("Could not open the path specified in the fileName argument to LoadLibraryRedirector.");
-
             }
             (void)GetFileSizeEx(file, &fileSize);
             CloseHandle(file);
             if (!MapModule(bytes, &baseAddress, &mappedSize)) {
                 throw std::exception("Could not map the library specified in the bytes argument to LoadLibraryRedirector.");
             }
+            // Added to support Windows 24H2. Please refer to this issue for more information:
+            // https://github.com/EvanMcBroom/perfect-loader/issues/1
+            PL_LAZY_LOAD_NATIVE_PROC(NtManageHotPatch);
+            if (LazyNtManageHotPatch) {
+                ntManageHotPatch = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtManageHotPatch), reinterpret_cast<std::byte*>(NtManageHotPatchHook), useHbp, false);
+                PL_LAZY_LOAD_NATIVE_PROC(NtQueryVirtualMemory);
+                ntQueryVirtualMemoryHook = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtQueryVirtualMemory), reinterpret_cast<std::byte*>(NtQueryVirtualMemoryHook), useHbp);
+            }
             PL_LAZY_LOAD_NATIVE_PROC(NtMapViewOfSection);
             ntMapViewOfSectionHook = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtMapViewOfSection), reinterpret_cast<std::byte*>(NtMapViewOfSectionHook), useHbp);
         }
     }
+#pragma warning(pop)
 
     LoadLibraryRedirector::~LoadLibraryRedirector() {
         ntCreateSectionHook = nullptr;
         ntOpenFileHook = nullptr;
         ntMapViewOfSectionHook = nullptr;
+        ntQueryVirtualMemoryHook = nullptr;
         PL_LAZY_LOAD_NATIVE_PROC(RtlSetCurrentTransaction);
         if (transaction != INVALID_HANDLE_VALUE) {
             LazyRtlSetCurrentTransaction(0);
@@ -148,6 +163,20 @@ namespace Pl {
         return status;
     }
 
+    NTSTATUS NTAPI LoadLibraryRedirector::NtManageHotPatchHook(ULONG Operation, PVOID SubmitBuffer, ULONG SubmitBufferLength, NTSTATUS* OperationStatus) {
+        ntManageHotPatch->Enable(false);
+        // OPERATION_QUERY_SINGLE_LOADED_PATCH = 8
+        // Source: https://github.com/chc/NtManageHotpatchTests
+        if (Operation == 8) {
+            std::memset(SubmitBuffer, '\0', SubmitBufferLength);
+            return STATUS_SUCCESS;
+        }
+        PL_LAZY_LOAD_NATIVE_PROC(NtManageHotPatch);
+        auto status{ LazyNtManageHotPatch(Operation, SubmitBuffer, SubmitBufferLength, OperationStatus) };
+        ntManageHotPatch->Enable(true);
+        return status;
+    }
+
     NTSTATUS NTAPI LoadLibraryRedirector::NtMapViewOfSectionHook(HANDLE SectionHandle, HANDLE ProcessHandle, PVOID* BaseAddress, ULONG_PTR ZeroBits, SIZE_T CommitSize, PLARGE_INTEGER SectionOffset, PSIZE_T ViewSize, SECTION_INHERIT InheritDisposition, ULONG AllocationType, ULONG Win32Protect) {
         PL_LAZY_LOAD_NATIVE_PROC(NtQuerySection);
         SECTION_IMAGE_INFORMATION information = { 0 };
@@ -163,6 +192,18 @@ namespace Pl {
         PL_LAZY_LOAD_NATIVE_PROC(NtMapViewOfSection);
         auto status{ LazyNtMapViewOfSection(SectionHandle, ProcessHandle, BaseAddress, ZeroBits, CommitSize, SectionOffset, ViewSize, InheritDisposition, AllocationType, Win32Protect) };
         ntMapViewOfSectionHook->Enable(true);
+        return status;
+    }
+
+    NTSTATUS NTAPI LoadLibraryRedirector::NtQueryVirtualMemoryHook(HANDLE ProcessHandle, PVOID BaseAddress, MEMORY_INFORMATION_CLASS MemoryInformationClass, PVOID MemoryInformation, SIZE_T MemoryInformationLength, PSIZE_T ReturnLength) {
+        ntQueryVirtualMemoryHook->Enable(false);
+        if (BaseAddress == baseAddress && MemoryInformationClass == MemoryImageExtensionInformation) {
+            ntManageHotPatch->Enable(true);
+            return STATUS_NOT_SUPPORTED;
+        }
+        PL_LAZY_LOAD_NATIVE_PROC(NtQueryVirtualMemory);
+        auto status{ LazyNtQueryVirtualMemory(ProcessHandle, BaseAddress, MemoryInformationClass, MemoryInformation, MemoryInformationLength, ReturnLength) };
+        ntQueryVirtualMemoryHook->Enable(true);
         return status;
     }
 
@@ -225,6 +266,7 @@ namespace Pl {
                 (void)RemoveHeaders(peBase);
             }
         }
+        auto a = GetLastError();
         return library;
     }
 
@@ -240,7 +282,7 @@ namespace Pl {
                 bool lastReadSucceeded{ true };
                 while (totalBytesRead < sizeOfHeaders && lastReadSucceeded) {
                     DWORD bytesRead;
-                    ReadFile(file, peBase + totalBytesRead, sizeOfHeaders - totalBytesRead, &bytesRead, nullptr);
+                    (void)ReadFile(file, peBase + totalBytesRead, sizeOfHeaders - totalBytesRead, &bytesRead, nullptr);
                     totalBytesRead += bytesRead;
                 }
                 VirtualProtect(peBase, sizeOfHeaders, protection, &protection);
