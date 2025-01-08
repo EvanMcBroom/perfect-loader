@@ -169,6 +169,9 @@ namespace Pl {
         // Source: https://github.com/chc/NtManageHotpatchTests
         if (Operation == 8) {
             std::memset(SubmitBuffer, '\0', SubmitBufferLength);
+            if (OperationStatus) {
+                *OperationStatus = 0;
+            }
             return STATUS_SUCCESS;
         }
         PL_LAZY_LOAD_NATIVE_PROC(NtManageHotPatch);
