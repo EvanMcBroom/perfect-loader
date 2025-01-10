@@ -12,8 +12,8 @@
 
 /// <summary>
 /// Finds a usable dll path to pass to LoadLibrary to start its loading process.
-/// The approach that is used to identify a dll path was taking from Alex Short's
-/// (rbmm's) excellent ARL project. Please checkout their work as well:
+/// The approach that is used is based on Alex Short's (rbmm's) excellent ARL
+/// project. Please checkout their work as well:
 /// https://github.com/rbmm/ARL
 /// 
 /// For manual mapping, the following requirements are needed:
@@ -22,10 +22,9 @@
 ///   loaded dll.
 /// - The dll must not be in KnownDlls. If it is, LoadLibrary will exit
 ///   early and return the handle in the KnownDlls directory.
-/// - The dll should be larger than the mapped in-memory dll and it should
-///   not have cfg enabled. Such a dll skips additional post processing
-///   that is done in LdrpProcessMappedModule which could be problematic
-///   on some Windows releases.
+/// - The dll should not have cfg enabled. Such a dll skips additional post
+///   processing that is done in LdrpProcessMappedModule which could be
+///   problematic on some Windows releases.
 /// This function checks for requirements 1 and 3.
 /// 
 /// For module doppelgänging, the following requirments are needed:
@@ -38,11 +37,11 @@
 ///   plain text file).
 /// This function does not implement these checks.
 /// </summary>
-std::wstring FindUsableDll(const std::wstring& searchDir, size_t minimumSize) {
+std::wstring FindUsableDll(const std::wstring& searchDir) {
     std::wstring usablePath;
     for (auto const& entry : std::filesystem::directory_iterator{ searchDir, std::filesystem::directory_options::skip_permission_denied }) {
         auto path{ entry.path().wstring() };
-        if (!entry.path().extension().compare(L".dll") && entry.file_size() >= minimumSize) {
+        if (!entry.path().extension().compare(L".dll")) {
             auto moduleHandle{ GetModuleHandleW(path.data()) };
             if (moduleHandle) {
                 continue;
@@ -102,8 +101,8 @@ std::vector<std::byte> ReadFile(const std::wstring& path) {
 /// </summary>
 int wmain(int argc, wchar_t** argv) {
     if (argc > 1) {
+        auto filePath{ FindUsableDll(L"C:\\Windows\\System32") };
         auto bytes{ ReadFile(argv[1]) };
-        auto filePath{ FindUsableDll(L"C:\\Windows\\System32", bytes.size()) };
         auto library{ Pl::LoadLibrary(filePath, bytes, Pl::UseHbp) };
         std::wcout << L"Loaded module at address: 0x" << library << std::endl;
         std::wcout << L"Waiting for user input to exit..." << std::endl;
