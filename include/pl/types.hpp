@@ -168,6 +168,28 @@ namespace Pl {
         Pl::PPEB_LDR_DATA Ldr;
         // ...
     } PEB, *PPEB;
+    
+    /// <summary>
+    /// The protected policy guid for RtlpAddVectoredHandler. The policy guid was
+    /// first documented by redplait and its use when performing a VEH based hook
+    /// was first demonstrated by Alex Short's (rbmm's) ARL project.
+    /// 
+    /// Protected policies were introduced in NT 6.3. They allow software to
+    /// dynamically enable or disable a GUID identified policy for the current
+    /// process which other software may query the value of and handle as needed.
+    /// 
+    /// The RtlpAddVectoredHandler policy sets whether VEH registration should be
+    /// disabled within the current process. That may be seen in its use within
+    /// eShims.dll. Some Microsoft software will identify uses of VEH and report
+    /// an error if the RtlpAddVectoredHandler policy is enabled. Disabling this
+    /// policy will allow VEH based hooking to be used without errors being
+    /// reported by such software.
+    /// 
+    /// Sources:
+    /// https://redplait.blogspot.com/2017/04/ntdll-protectedpolicies.html
+    /// https://github.com/rbmm/ARL
+    /// </summary>
+    struct DECLSPEC_UUID("1FC98BCA-1BA9-4397-93F9-349EAD41E057") RtlpAddVectoredHandler;
 
     [[maybe_unused]] NTSTATUS NTAPI LdrLockLoaderLock(ULONG Flags, ULONG* State, SIZE_T* Cookie);
     [[maybe_unused]] NTSTATUS NTAPI LdrRegisterDllNotification(ULONG Flags, PLDR_DLL_NOTIFICATION_FUNCTION NotificationFunction, PVOID Context, PVOID* Cookie);
@@ -180,4 +202,5 @@ namespace Pl {
     [[maybe_unused]] NTSTATUS NTAPI NtQueryVirtualMemory(HANDLE ProcessHandle, PVOID BaseAddress, MEMORY_INFORMATION_CLASS MemoryInformationClass, PVOID MemoryInformation, SIZE_T MemoryInformationLength, PSIZE_T ReturnLength);
     [[maybe_unused]] NTSTATUS NTAPI RtlGetVersion(PRTL_OSVERSIONINFOW lpVersionInformation);
     [[maybe_unused]] BOOL NTAPI RtlSetCurrentTransaction(HANDLE Transaction);
+    [[maybe_unused]] NTSTATUS NTAPI RtlSetProtectedPolicy(const GUID* PolicyGuid, SIZE_T PolicyValue, PSIZE_T OldPolicyValue);
 }

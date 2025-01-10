@@ -35,6 +35,8 @@
 namespace {
     // Data used by loader options
     std::wstring modListName;
+    size_t addVectoredHandlerProtectionPolicy;
+    bool useHbp;
 
     // Data used by the manual mapping approach
     LARGE_INTEGER fileSize;
@@ -62,7 +64,13 @@ namespace Pl {
 #pragma warning(disable : 26115)
     LoadLibraryRedirector::LoadLibraryRedirector(std::wstring fileName, const std::vector<std::byte>& bytes, DWORD flags, const std::wstring& modListName) {
         ::modListName = modListName;
-        auto useHbp{ flags & LoadFlags::UseHbp };
+        useHbp = flags & LoadFlags::UseHbp;
+        if (useHbp) {
+            PL_LAZY_LOAD_NATIVE_PROC(RtlSetProtectedPolicy);
+            if (LazyRtlSetProtectedPolicy) {
+                (void)LazyRtlSetProtectedPolicy(&__uuidof(RtlpAddVectoredHandler), 0, &addVectoredHandlerProtectionPolicy);
+            }
+        }
         if (flags & LoadFlags::UseTxf) {
             ::fileName = fileName;
             libraryBytes = bytes;
@@ -101,6 +109,12 @@ namespace Pl {
         ntOpenFileHook = nullptr;
         ntMapViewOfSectionHook = nullptr;
         ntQueryVirtualMemoryHook = nullptr;
+        if (useHbp) {
+            PL_LAZY_LOAD_NATIVE_PROC(RtlSetProtectedPolicy);
+            if (LazyRtlSetProtectedPolicy) {
+                (void)LazyRtlSetProtectedPolicy(&__uuidof(RtlpAddVectoredHandler), addVectoredHandlerProtectionPolicy, 0);
+            }
+        }
         PL_LAZY_LOAD_NATIVE_PROC(RtlSetCurrentTransaction);
         if (transaction != INVALID_HANDLE_VALUE) {
             LazyRtlSetCurrentTransaction(0);
