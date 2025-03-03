@@ -18,7 +18,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-add_library(${PROJECT_NAME} STATIC)
+add_library(${PROJECT_NAME} SHARED)
 target_sources(${PROJECT_NAME} PRIVATE
     include/perfect_loader.hpp
     include/pl/hook.hpp
@@ -28,6 +28,8 @@ target_sources(${PROJECT_NAME} PRIVATE
     include/pl/types.hpp
 )
 target_include_directories(${PROJECT_NAME} PUBLIC include)
+set_target_properties(${PROJECT_NAME} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+
 
 add_library(${CLIB} SHARED)
 target_sources(${CLIB} PRIVATE include/perfect_loader.h)
