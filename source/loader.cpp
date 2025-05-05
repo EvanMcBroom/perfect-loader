@@ -35,7 +35,7 @@
 namespace {
     // Data used by loader options
     std::wstring modListName;
-    size_t addVectoredHandlerProtectionPolicy;
+    SIZE_T addVectoredHandlerProtectionPolicy;
     bool useHbp;
 
     // Data used by the manual mapping approach
