@@ -68,7 +68,8 @@ namespace Pl {
         if (useHbp) {
             PL_LAZY_LOAD_NATIVE_PROC(RtlSetProtectedPolicy);
             if (LazyRtlSetProtectedPolicy) {
-                (void)LazyRtlSetProtectedPolicy(&__uuidof(RtlpAddVectoredHandler), 0, &addVectoredHandlerProtectionPolicy);
+                SIZE_T propol(addVectoredHandlerProtectionPolicy) ;
+                (void)LazyRtlSetProtectedPolicy(&__uuidof(RtlpAddVectoredHandler), 0, &propol);
             }
         }
         if (flags & LoadFlags::UseTxf) {
