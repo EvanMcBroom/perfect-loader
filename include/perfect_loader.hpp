@@ -87,6 +87,9 @@ namespace Pl {
     /// <param name='peBase'>The address of the start of the module.</param>
     PLDR_DATA_TABLE_ENTRY GetLdrDataTableEntry(std::byte* peBase);
 
+    /// <summary>Get the full binary version number for the ntdll module that is currently loaded in memory.</summary>
+    ULONGLONG GetNtdllVersion();
+
     /// <summary>
     ///     Loads the provided module bytes into the address space of the calling process.
     ///     The process of loading the module may cause other modules to be loaded.

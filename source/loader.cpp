@@ -20,6 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //
+#define UNICODE
 #include "perfect_loader.hpp"
 #include <algorithm>
 #include <fstream>
@@ -35,7 +36,7 @@
 namespace {
     // Data used by loader options
     std::wstring modListName;
-    size_t addVectoredHandlerProtectionPolicy;
+    SIZE_T addVectoredHandlerProtectionPolicy;
     bool useHbp;
 
     // Data used by the manual mapping approach
@@ -90,13 +91,16 @@ namespace Pl {
             if (!MapModule(bytes, &baseAddress, &mappedSize)) {
                 throw std::exception("Could not map the library specified in the bytes argument to LoadLibraryRedirector.");
             }
-            // Added to support Windows 24H2. Please refer to this issue for more information:
-            // https://github.com/EvanMcBroom/perfect-loader/issues/1
-            PL_LAZY_LOAD_NATIVE_PROC(NtManageHotPatch);
-            if (LazyNtManageHotPatch) {
-                ntManageHotPatch = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtManageHotPatch), reinterpret_cast<std::byte*>(NtManageHotPatchHook), useHbp, false);
-                PL_LAZY_LOAD_NATIVE_PROC(NtQueryVirtualMemory);
-                ntQueryVirtualMemoryHook = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtQueryVirtualMemory), reinterpret_cast<std::byte*>(NtQueryVirtualMemoryHook), useHbp);
+            auto ntdllVersion{ GetNtdllVersion() };
+            if (ntdllVersion >= 0x000a000065f40000) { // Version 24H2 (OS Build 26100.0) and higher
+                // Added to support Windows 24H2. Please refer to this issue for more information:
+                // https://github.com/EvanMcBroom/perfect-loader/issues/1
+                PL_LAZY_LOAD_NATIVE_PROC(NtManageHotPatch);
+                if (LazyNtManageHotPatch) {
+                    ntManageHotPatch = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtManageHotPatch), reinterpret_cast<std::byte*>(NtManageHotPatchHook), useHbp, false);
+                    PL_LAZY_LOAD_NATIVE_PROC(NtQueryVirtualMemory);
+                    ntQueryVirtualMemoryHook = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtQueryVirtualMemory), reinterpret_cast<std::byte*>(NtQueryVirtualMemoryHook), useHbp);
+                }
             }
             PL_LAZY_LOAD_NATIVE_PROC(NtMapViewOfSection);
             ntMapViewOfSectionHook = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtMapViewOfSection), reinterpret_cast<std::byte*>(NtMapViewOfSectionHook), useHbp);
@@ -247,6 +251,19 @@ namespace Pl {
             iter = iter->Flink;
         } while (iter != moduleList);
         return nullptr;
+    }
+
+    ULONGLONG GetNtdllVersion() {
+        auto ntdll{ GetModuleHandleW(L"ntdll.dll") };
+        if (ntdll) {
+            auto hResource{ FindResourceW(ntdll, MAKEINTRESOURCEW(VS_VERSION_INFO), RT_VERSION) };
+            if (hResource) {
+                auto gResource{ LoadResource(ntdll, hResource) };
+                auto verHead{ reinterpret_cast<VERHEAD*>(LockResource(gResource)) };
+                return (ULONGLONG(verHead->vsf.dwFileVersionMS) << 32) | verHead->vsf.dwFileVersionLS;
+            }
+        }
+        return 0;
     }
 
     HMODULE LoadLibrary(const std::wstring& fileName, const std::vector<std::byte>& bytes, DWORD flags, const std::wstring& modListName, DWORD nativeFlags) {

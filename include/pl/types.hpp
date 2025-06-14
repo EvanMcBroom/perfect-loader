@@ -169,6 +169,14 @@ namespace Pl {
         // ...
     } PEB, *PPEB;
     
+    typedef struct tagVERHEAD {
+        WORD wTotLen;
+        WORD wValLen;
+        WORD wType;
+        WCHAR szKey[(sizeof("VS_VERSION_INFO") + 3) & ~03];
+        VS_FIXEDFILEINFO vsf;
+    } VERHEAD;
+
     /// <summary>
     /// The protected policy guid for RtlpAddVectoredHandler. The policy guid was
     /// first documented by redplait and its use when performing a VEH based hook
