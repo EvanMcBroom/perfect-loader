@@ -33,7 +33,7 @@ namespace Pl {
     /// </summary>
     class HookBase {
     public:
-        HookBase::HookBase(std::byte* target, std::byte* hook)
+        HookBase(std::byte* target, std::byte* hook)
             : target(target), hook(hook) {
         }
 
@@ -115,7 +115,7 @@ namespace Pl {
     /// </summary>
     class HbpHook : public HookBase {
     public:
-        HbpHook::HbpHook(std::byte* target, std::byte* hook, bool enabled = true)
+        HbpHook(std::byte* target, std::byte* hook, bool enabled = true)
             : HookBase(target, hook) {
             if (enabled) {
                 Enable(true);
