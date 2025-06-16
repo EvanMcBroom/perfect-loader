@@ -91,15 +91,20 @@ namespace Pl {
             if (!MapModule(bytes, &baseAddress, &mappedSize)) {
                 throw std::exception("Could not map the library specified in the bytes argument to LoadLibraryRedirector.");
             }
-            auto ntdllVersion{ GetNtdllVersion() };
-            if (ntdllVersion >= 0x000a000065f40000) { // Version 24H2 (OS Build 26100.0) and higher
-                // Added to support Windows 24H2. Please refer to this issue for more information:
-                // https://github.com/EvanMcBroom/perfect-loader/issues/1
-                PL_LAZY_LOAD_NATIVE_PROC(NtManageHotPatch);
-                if (LazyNtManageHotPatch) {
-                    ntManageHotPatch = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtManageHotPatch), reinterpret_cast<std::byte*>(NtManageHotPatchHook), useHbp, false);
-                    PL_LAZY_LOAD_NATIVE_PROC(NtQueryVirtualMemory);
-                    ntQueryVirtualMemoryHook = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtQueryVirtualMemory), reinterpret_cast<std::byte*>(NtQueryVirtualMemoryHook), useHbp);
+            // Windows 11 24H2 added code that's problematic for redirecting LoadLibrary to load an in-memory DLL
+            // The problematic code is only present for AMD64 and ARM64 modules, not Intel 386 modules (ex. SysWOW64)
+            // If ntdll is version 24H2 or higher and is for AMD64 or ARM64, then we will enable extra hooks to support it
+            // Reference: https://github.com/EvanMcBroom/perfect-loader/issues/1
+            auto ntdllArchitecture{ Pe(reinterpret_cast<std::byte*>(GetModuleHandleW(L"ntdll.dll"))).PeHeader()->Machine };
+            if (ntdllArchitecture == IMAGE_FILE_MACHINE_AMD64 || ntdllArchitecture == IMAGE_FILE_MACHINE_ARM64) {
+                auto ntdllVersion{ GetNtdllVersion() };
+                if (ntdllVersion >= 0x000a000065f40000) { // Version 24H2 (OS Build 26100.0) and higher
+                    PL_LAZY_LOAD_NATIVE_PROC(NtManageHotPatch);
+                    if (LazyNtManageHotPatch) {
+                        ntManageHotPatch = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtManageHotPatch), reinterpret_cast<std::byte*>(NtManageHotPatchHook), useHbp, false);
+                        PL_LAZY_LOAD_NATIVE_PROC(NtQueryVirtualMemory);
+                        ntQueryVirtualMemoryHook = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtQueryVirtualMemory), reinterpret_cast<std::byte*>(NtQueryVirtualMemoryHook), useHbp);
+                    }
                 }
             }
             PL_LAZY_LOAD_NATIVE_PROC(NtMapViewOfSection);
@@ -300,7 +305,6 @@ namespace Pl {
                 (void)RemoveHeaders(peBase);
             }
         }
-        auto a = GetLastError();
         return library;
     }
 
