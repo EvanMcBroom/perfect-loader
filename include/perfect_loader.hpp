@@ -74,7 +74,7 @@ namespace Pl {
 
         static NTSTATUS NTAPI NtCreateSectionHook(PHANDLE SectionHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PLARGE_INTEGER MaximumSize, ULONG SectionPageProtection, ULONG AllocationAttributes, HANDLE FileHandle);
         static NTSTATUS NTAPI NtOpenFileHook(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PIO_STATUS_BLOCK IoStatusBlock, ULONG ShareAccess, ULONG OpenOptions);
-        static NTSTATUS NTAPI NtManageHotPatchHook(ULONG Operation, PVOID SubmitBuffer, ULONG SubmitBufferLength, NTSTATUS* OperationStatus);
+        static NTSTATUS NTAPI NtManageHotPatchHook(HOT_PATCH_INFORMATION_CLASS HotPatchInformationClass, PVOID HotPatchInformation, ULONG HotPatchInformationLength, PULONG ReturnLength);
         static NTSTATUS NTAPI NtMapViewOfSectionHook(HANDLE SectionHandle, HANDLE ProcessHandle, PVOID* BaseAddress, ULONG_PTR ZeroBits, SIZE_T CommitSize, PLARGE_INTEGER SectionOffset, PSIZE_T ViewSize, SECTION_INHERIT InheritDisposition, ULONG AllocationType, ULONG Win32Protect);
         static NTSTATUS NTAPI NtQueryVirtualMemoryHook(HANDLE ProcessHandle, PVOID BaseAddress, MEMORY_INFORMATION_CLASS MemoryInformationClass, PVOID MemoryInformation, SIZE_T MemoryInformationLength, PSIZE_T ReturnLength);
     };
@@ -89,6 +89,14 @@ namespace Pl {
 
     /// <summary>Get the full binary version number for the ntdll module that is currently loaded in memory.</summary>
     ULONGLONG GetNtdllVersion();
+
+    /// <summary>
+    /// Check if the host supports hotpatching. Hotpatching is possible on Windows 24H2
+    /// and Server 2025 hosts for x64 and arm64 modules when virtualization based
+    /// security (VBS) is enabled. This function checks for that last prerequisite. The
+    /// implementation is based on ntdll!LdrpInitializeHotPatching.
+    /// </summary>
+    bool IsHotPatchingEnabled();
 
     /// <summary>
     ///     Loads the provided module bytes into the address space of the calling process.

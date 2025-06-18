@@ -28,37 +28,39 @@
 #define LDRP_DONT_CALL_FOR_THREADS 0x00040000
 #define STATUS_SUCCESS             0x00000000
 #define STATUS_IMAGE_NOT_AT_BASE   0x40000003
+#define STATUS_NOT_IMPLEMENTED     0xC0000002
 #define STATUS_NOT_SUPPORTED       0xC00000BB
 
 namespace Pl {
+    // Source: ntexapi.h from phnt
+    typedef enum _HOT_PATCH_INFORMATION_CLASS {
+        // ...
+        ManageHotPatchQuerySinglePatch = 8,
+        ManageHotPatchCheckEnabled = 9
+        // ...
+    } HOT_PATCH_INFORMATION_CLASS;
+
+    // Source: ntexapi.h from phnt
+    typedef struct _MANAGE_HOT_PATCH_CHECK_ENABLED {
+        ULONG Version;
+        ULONG Flags;
+    } MANAGE_HOT_PATCH_CHECK_ENABLED, *PMANAGE_HOT_PATCH_CHECK_ENABLED;
+
     // Source: ntmmapi.h from phnt
     typedef enum _MEMORY_INFORMATION_CLASS {
-        MemoryBasicInformation,
-        MemoryWorkingSetInformation,
-        MemoryMappedFilenameInformation,
-        MemoryRegionInformation,
-        MemoryWorkingSetExInformation,
-        MemorySharedCommitInformation,
-        MemoryImageInformation,
-        MemoryRegionInformationEx,
-        MemoryPrivilegedBasicInformation,
-        MemoryEnclaveImageInformation,
-        MemoryBasicInformationCapped,
-        MemoryPhysicalContiguityInformation,
-        MemoryBadInformation,
-        MemoryBadInformationAllProcesses,
-        MemoryImageExtensionInformation,
-        MaxMemoryInfoClass
+        // ...
+        MemoryImageExtensionInformation = 14
+        // ...
     } MEMORY_INFORMATION_CLASS;
 
     typedef enum _SECTION_INFORMATION_CLASS {
-        SectionBasicInformation,
-        SectionImageInformation
+        // ...
+        SectionImageInformation = 1
         // ...
     } SECTION_INFORMATION_CLASS;
 
     typedef enum _SECTION_INHERIT {
-        ViewShare = 1,
+        // ...
         ViewUnmap = 2
     } SECTION_INHERIT;
 
@@ -204,7 +206,7 @@ namespace Pl {
     [[maybe_unused]] NTSTATUS NTAPI LdrUnlockLoaderLock(ULONG Flags, SIZE_T Cookie);
     [[maybe_unused]] NTSTATUS NTAPI LdrUnregisterDllNotification(PVOID Cookie);
     [[maybe_unused]] NTSTATUS NTAPI NtCreateSection(PHANDLE SectionHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PLARGE_INTEGER MaximumSize, ULONG SectionPageProtection, ULONG AllocationAttributes, HANDLE FileHandle);
-    [[maybe_unused]] NTSTATUS NTAPI NtManageHotPatch(ULONG Operation, PVOID SubmitBuffer, ULONG SubmitBufferLength, NTSTATUS* OperationStatus);
+    [[maybe_unused]] NTSTATUS NTAPI NtManageHotPatch(HOT_PATCH_INFORMATION_CLASS HotPatchInformationClass, PVOID HotPatchInformation, ULONG HotPatchInformationLength, PULONG ReturnLength);
     [[maybe_unused]] NTSTATUS NTAPI NtMapViewOfSection(HANDLE SectionHandle, HANDLE ProcessHandle, PVOID* BaseAddress, ULONG_PTR ZeroBits, SIZE_T CommitSize, PLARGE_INTEGER SectionOffset, PSIZE_T ViewSize, SECTION_INHERIT InheritDisposition, ULONG AllocationType, ULONG Win32Protect);
     [[maybe_unused]] NTSTATUS NTAPI NtQuerySection(HANDLE SectionHandle, SECTION_INFORMATION_CLASS SectionInformationClass, PVOID SectionInformation, SIZE_T SectionInformationLength, PSIZE_T ReturnLength);
     [[maybe_unused]] NTSTATUS NTAPI NtQueryVirtualMemory(HANDLE ProcessHandle, PVOID BaseAddress, MEMORY_INFORMATION_CLASS MemoryInformationClass, PVOID MemoryInformation, SIZE_T MemoryInformationLength, PSIZE_T ReturnLength);

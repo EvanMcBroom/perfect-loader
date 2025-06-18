@@ -91,16 +91,17 @@ namespace Pl {
             if (!MapModule(bytes, &baseAddress, &mappedSize)) {
                 throw std::exception("Could not map the library specified in the bytes argument to LoadLibraryRedirector.");
             }
-            // Windows 11 24H2 added code that's problematic for redirecting LoadLibrary to load an in-memory DLL
-            // The problematic code is only present for AMD64 and ARM64 modules, not Intel 386 modules (ex. SysWOW64)
-            // If ntdll is version 24H2 or higher and is for AMD64 or ARM64, then we will enable extra hooks to support it
+            // Windows 11 24H2 added code that's problematic for redirecting LoadLibrary to load an in-memory DLL.
+            // The problematic code is only present for amd64 and arm64 modules, not i386 modules (ex. SysWOW64).
+            // If ntdll is version 24H2 or higher, is for amd64 or arm64, and hotpatching is enabled, then we will
+            // enable extra hooks to support for it.
             // Reference: https://github.com/EvanMcBroom/perfect-loader/issues/1
             auto ntdllArchitecture{ Pe(reinterpret_cast<std::byte*>(GetModuleHandleW(L"ntdll.dll"))).PeHeader()->Machine };
             if (ntdllArchitecture == IMAGE_FILE_MACHINE_AMD64 || ntdllArchitecture == IMAGE_FILE_MACHINE_ARM64) {
                 auto ntdllVersion{ GetNtdllVersion() };
                 if (ntdllVersion >= 0x000a000065f40000) { // Version 24H2 (OS Build 26100.0) and higher
-                    PL_LAZY_LOAD_NATIVE_PROC(NtManageHotPatch);
-                    if (LazyNtManageHotPatch) {
+                    if (IsHotPatchingEnabled()) {
+                        PL_LAZY_LOAD_NATIVE_PROC(NtManageHotPatch);
                         ntManageHotPatch = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtManageHotPatch), reinterpret_cast<std::byte*>(NtManageHotPatchHook), useHbp, false);
                         PL_LAZY_LOAD_NATIVE_PROC(NtQueryVirtualMemory);
                         ntQueryVirtualMemoryHook = std::make_unique<Hook>(reinterpret_cast<std::byte*>(LazyNtQueryVirtualMemory), reinterpret_cast<std::byte*>(NtQueryVirtualMemoryHook), useHbp);
@@ -186,19 +187,17 @@ namespace Pl {
         return status;
     }
 
-    NTSTATUS NTAPI LoadLibraryRedirector::NtManageHotPatchHook(ULONG Operation, PVOID SubmitBuffer, ULONG SubmitBufferLength, NTSTATUS* OperationStatus) {
+    NTSTATUS NTAPI LoadLibraryRedirector::NtManageHotPatchHook(HOT_PATCH_INFORMATION_CLASS HotPatchInformationClass, PVOID HotPatchInformation, ULONG HotPatchInformationLength, PULONG ReturnLength) {
         ntManageHotPatch->Enable(false);
-        // OPERATION_QUERY_SINGLE_LOADED_PATCH = 8
-        // Source: https://github.com/chc/NtManageHotpatchTests
-        if (Operation == 8) {
-            std::memset(SubmitBuffer, '\0', SubmitBufferLength);
-            if (OperationStatus) {
-                *OperationStatus = 0;
+        if (HotPatchInformationClass == ManageHotPatchQuerySinglePatch) {
+            std::memset(HotPatchInformation, '\0', HotPatchInformationLength);
+            if (ReturnLength) {
+                *ReturnLength = 0;
             }
             return STATUS_SUCCESS;
         }
         PL_LAZY_LOAD_NATIVE_PROC(NtManageHotPatch);
-        auto status{ LazyNtManageHotPatch(Operation, SubmitBuffer, SubmitBufferLength, OperationStatus) };
+        auto status{ LazyNtManageHotPatch(HotPatchInformationClass, HotPatchInformation, HotPatchInformationLength, ReturnLength) };
         ntManageHotPatch->Enable(true);
         return status;
     }
@@ -269,6 +268,21 @@ namespace Pl {
             }
         }
         return 0;
+    }
+
+    bool IsHotPatchingEnabled() {
+        PL_LAZY_LOAD_NATIVE_PROC(NtManageHotPatch);
+        if (LazyNtManageHotPatch) {
+            MANAGE_HOT_PATCH_CHECK_ENABLED information;
+            information.Version = 1;
+            information.Flags = 0;
+            ULONG returnLength{ 0 };
+            auto status{ LazyNtManageHotPatch(ManageHotPatchCheckEnabled, &information, sizeof(information), &returnLength) };
+            if (status != STATUS_NOT_IMPLEMENTED && status != STATUS_NOT_SUPPORTED) {
+                return true;
+            }
+        }
+        return false;
     }
 
     HMODULE LoadLibrary(const std::wstring& fileName, const std::vector<std::byte>& bytes, DWORD flags, const std::wstring& modListName, DWORD nativeFlags) {
