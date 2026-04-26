@@ -27,7 +27,7 @@
 ///   problematic on some Windows releases.
 /// This function checks for requirements 1 and 3.
 /// 
-/// For module doppelg‰nging, the following requirments are needed:
+/// For module doppelg√§nging, the following requirments are needed:
 /// - The effective thread which calls the perfect loader API must be
 ///   allowed to write to the file. The file's contents will only be
 ///   modified in memory, but it will be done in a temporary file

@@ -41,6 +41,9 @@
 #undef LoadLibrary
 
 namespace Pl {
+    /// <summary>
+    /// Flags that control loader behavior and post-processing when loading a module from memory.
+    /// </summary>
     enum LoadFlags {
         NoFlags = 0x00, // No flags
         NoHeaders = 0x01, // Remove image headers
@@ -53,15 +56,20 @@ namespace Pl {
         AllFlags = 0xFF // Enable everything
     };
 
-    /// <summary>
-    ///     Replaces any request to load fileName as a library with the provided bytes.
-    /// </summary>
-    /// <returns>
-    ///     LoadLibraryRedirector uses an internal lock to prevent multiple instances from being created at the same time
-    /// </returns>
     class LoadLibraryRedirector {
     public:
+        /// <summary>
+        /// Creates a redirector that intercepts loader calls for <paramref name="fileName"/> and resolves them to <paramref name="bytes"/>.
+        /// LoadLibraryRedirector uses an internal lock to prevent multiple instances from being created at the same time/
+        /// </summary>
+        /// <param name='fileName'>The on-disk module path used as the loader lookup target. Some <paramref name="flags"/> allow this to be any file.</param>
+        /// <param name='bytes'>The module bytes to supply when the target path is loaded.</param>
+        /// <param name='flags'>Optional loader behavior flags from <see cref="LoadFlags"/>.</param>
+        /// <param name='modListName'>Optional alternate module-list name used when <see cref="UseTxf"/> is enabled.</param>
         LoadLibraryRedirector(std::wstring fileName, const std::vector<std::byte>& bytes, DWORD flags = 0, const std::wstring& modListName = L"");
+        /// <summary>
+        /// Removes all active redirection hooks and restores modified process state.
+        /// </summary>
         ~LoadLibraryRedirector();
 
     private:

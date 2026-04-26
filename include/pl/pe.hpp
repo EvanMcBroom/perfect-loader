@@ -25,41 +25,59 @@
 #include <winnt.h>
 
 namespace Pl {
+    /// <summary>
+    /// Lightweight reader for PE image metadata from a module base address.
+    /// </summary>
     struct Pe {
+        /// <summary>
+        /// Base address of the PE image being inspected.
+        /// </summary>
         const std::byte* base;
 
+        /// <summary>
+        /// Initializes a PE reader for a module base, or for the current executable when omitted.
+        /// </summary>
+        /// <param name='base'>Optional image base address.</param>
         inline Pe(const std::byte* base = nullptr) {
             this->base = (base) ? base : reinterpret_cast<std::byte*>(GetModuleHandleW(nullptr));
         }
 
+        /// <summary>Gets the DOS header pointer.</summary>
         inline auto DosHeader() const {
             return reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
         }
 
+        /// <summary>Gets the expected DOS header signature constant.</summary>
         constexpr auto FileSignature() const {
             return IMAGE_DOS_SIGNATURE;
         }
 
+        /// <summary>Gets the NT headers pointer.</summary>
         inline auto NtHeaders() const {
             return reinterpret_cast<const IMAGE_NT_HEADERS*>(this->base + DosHeader()->e_lfanew);
         }
 
+        /// <summary>Gets the expected NT headers signature constant.</summary>
         constexpr auto NtHeadersSignature() const {
             return IMAGE_NT_SIGNATURE;
         }
 
+        /// <summary>Gets the optional header pointer.</summary>
         inline auto OptionalHeader() const {
             return &NtHeaders()->OptionalHeader;
         }
 
+        /// <summary>Gets the expected optional-header magic value.</summary>
         constexpr auto OptionalHeaderSignature() const {
             return IMAGE_NT_OPTIONAL_HDR_MAGIC;
         }
 
+        /// <summary>Gets the PE file header pointer.</summary>
         inline auto PeHeader() const {
             return &NtHeaders()->FileHeader;
         }
 
+        /// <summary>Gets the first section header pointer.</summary>
         inline auto SectionHeaders() const {
             return reinterpret_cast<const IMAGE_SECTION_HEADER*>(reinterpret_cast<const std::byte*>(OptionalHeader()) + PeHeader()->SizeOfOptionalHeader);
         }

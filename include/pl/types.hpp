@@ -66,6 +66,9 @@ namespace Pl {
 
     typedef VOID(NTAPI* PLDR_DLL_NOTIFICATION_FUNCTION)(ULONG NotificationReason, PVOID NotificationData, PVOID Context);
 
+    /// <summary>
+    /// Partial definition of the loader's module table entry used for module-list operations.
+    /// </summary>
     typedef struct _LDR_DATA_TABLE_ENTRY {
         LIST_ENTRY InLoadOrderLinks;
         LIST_ENTRY InMemoryOrderLinks;
@@ -87,7 +90,7 @@ namespace Pl {
         };
         // ...
     } LDR_DATA_TABLE_ENTRY, *PLDR_DATA_TABLE_ENTRY;
-
+    
     typedef struct _LDRP_DLL_NOTIFICATION_BLOCK {
         LIST_ENTRY Links;
         PLDR_DLL_NOTIFICATION_FUNCTION NotificationFunction;
@@ -147,6 +150,9 @@ namespace Pl {
         LIST_ENTRY InInitializationOrderModuleList;
     } PEB_LDR_DATA, *PPEB_LDR_DATA;
 
+    /// <summary>
+    /// Partial definition of the process environment block.
+    /// </summary>
     typedef struct _PEB {
         BOOLEAN InheritedAddressSpace;
         BOOLEAN ReadImageFileExecOptions;

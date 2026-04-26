@@ -34,12 +34,12 @@
 #include <processthreadsapi.h>
 
 namespace {
-    // Data used by loader options
+    // Loader-option state persisted for the lifetime of a redirect session.
     std::wstring modListName;
     SIZE_T addVectoredHandlerProtectionPolicy;
     bool useHbp;
 
-    // Data used by the manual mapping approach
+    // State used by the manual mapping redirection path (non-TxF mode).
     LARGE_INTEGER fileSize;
     std::byte* baseAddress = nullptr;
     size_t mappedSize = 0;
@@ -47,7 +47,7 @@ namespace {
     std::unique_ptr<Pl::Hook> ntMapViewOfSectionHook;
     std::unique_ptr<Pl::Hook> ntQueryVirtualMemoryHook;
 
-    // Data used by the manual process doppelgänging approach
+    // State used by the Transactional NTFS (TxF) redirection path (e.g. module doppelgänging).
     std::wstring fileName;
     std::vector<std::byte> libraryBytes;
     std::unique_ptr<Pl::Hook> ntCreateSectionHook;
@@ -91,10 +91,10 @@ namespace Pl {
             if (!MapModule(bytes, &baseAddress, &mappedSize)) {
                 throw std::exception("Could not map the library specified in the bytes argument to LoadLibraryRedirector.");
             }
-            // Windows 11 24H2 added code that's problematic for redirecting LoadLibrary to load an in-memory DLL.
-            // The problematic code is only present for amd64 and arm64 modules, not i386 modules (ex. SysWOW64).
-            // If ntdll is version 24H2 or higher, is for amd64 or arm64, and hotpatching is enabled, then we will
-            // enable extra hooks to support for it.
+            // Windows 11 24H2 introduced a hotpatch query path that can interfere with redirecting
+            // LoadLibrary to an in-memory module. This path is only present in amd64/arm64 ntdll,
+            // not i386 ntdll (ex. SysWOW64). For those architectures on 24H2+ with hotpatching
+            // enabled, install compatibility hooks.
             // Reference: https://github.com/EvanMcBroom/perfect-loader/issues/1
             auto ntdllArchitecture{ Pe(reinterpret_cast<std::byte*>(GetModuleHandleW(L"ntdll.dll"))).PeHeader()->Machine };
             if (ntdllArchitecture == IMAGE_FILE_MACHINE_AMD64 || ntdllArchitecture == IMAGE_FILE_MACHINE_ARM64) {
@@ -144,7 +144,7 @@ namespace Pl {
         if (fileNameMatches) {
             // Open the requested file in a transaction and overwrite it
             transaction = CreateTransaction(nullptr, 0, 0, 0, 0, 0, nullptr);
-            // Set the transaction manually because it needs to stay open until LoadLibrary completes
+            // Keep the transaction active for the entire LoadLibrary call, then roll it back in the destructor.
             PL_LAZY_LOAD_NATIVE_PROC(RtlSetCurrentTransaction);
             LazyRtlSetCurrentTransaction(transaction);
             // Set modListName to the default of fileName if modListName was not specified
@@ -155,7 +155,7 @@ namespace Pl {
             if (writer == INVALID_HANDLE_VALUE && GetLastError() == ERROR_FILE_EXISTS) {
                 writer = CreateFileW(modListName.data(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
             }
-            // Overwrite the file with the current bytes of the library to load
+            // Write the payload to the transacted file handle so the loader reads our in-memory bytes.
             size_t totalBytesWritten{ 0 };
             bool lastWriteSucceeded{ true };
             while (totalBytesWritten < libraryBytes.size() && lastWriteSucceeded) {
@@ -167,7 +167,7 @@ namespace Pl {
             *FileHandle = CreateFileW(modListName.data(), GENERIC_READ, ShareAccess, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
             redirectCreateSection = true;
         } else {
-            // Open the requested file then re-enable the detour if its still needed
+            // Open the requested file then re-enable the detour for future opens with file name matches.
             status = LazyNtOpenFile(FileHandle, DesiredAccess, ObjectAttributes, IoStatusBlock, ShareAccess, OpenOptions);
             ntOpenFileHook->Enable(true);
         }
@@ -296,7 +296,7 @@ namespace Pl {
             if (flags & LoadFlags::NoThdCall) {
                 DisableThreadCallbacks(peBase);
             }
-            // There is no point in replacing the headers if they're going to be removed
+            // Skip header overwrite if headers will be zeroed out immediately afterwards.
             if (flags & LoadFlags::OvrHdrs && !(flags & LoadFlags::NoHeaders)) {
                 // First attempt to overwrite the file using the DLL name from the loader data table entry
                 // That allows users to originally supply the name of an API set which the loader will resolve
@@ -348,23 +348,22 @@ namespace Pl {
 
     bool RemoveDllNotifications() {
         bool succeeded{ false };
-        // Get the address of an entry in the notification block list
+        // Register a temporary callback to obtain an entry in the notification list.
         PL_LAZY_LOAD_NATIVE_PROC(LdrRegisterDllNotification);
         auto callback{ [](ULONG NotificationReason, PVOID NotificationData, PVOID Context) {} };
         PLDRP_DLL_NOTIFICATION_BLOCK initialBlock;
         if (NT_SUCCESS(LazyLdrRegisterDllNotification(0, callback, nullptr, reinterpret_cast<PVOID*>(&initialBlock)))) {
-            // Enumerate all entries in the notification block list
+            // Snapshot the circular notification list while the loader lock is held.
             std::vector<PLDRP_DLL_NOTIFICATION_BLOCK> notificationBlocks;
             auto cookie{ LockLoaderLock() };
             if (cookie) {
                 auto iter{ initialBlock };
                 do {
-                    // Only add notification blocks that were not registered by NTDLL
                     notificationBlocks.emplace_back(iter);
                     iter = reinterpret_cast<PLDRP_DLL_NOTIFICATION_BLOCK>(iter->Links.Flink);
                 } while (iter != initialBlock);
                 (void)UnlockLoaderLock(cookie);
-                // Remove all registered notifications
+                // Unregister each callback captured in the snapshot.
                 PL_LAZY_LOAD_NATIVE_PROC(LdrUnregisterDllNotification);
                 for (auto notificationBlock : notificationBlocks) {
                     LazyLdrUnregisterDllNotification(notificationBlock);

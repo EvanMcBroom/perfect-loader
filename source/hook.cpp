@@ -50,13 +50,13 @@ namespace Pl {
         }
     }
 
-    // Static member variable definitions for HbpHook
+    // Shared state for hardware-breakpoint hooks (max 4 debug registers per thread).
     std::array<std::pair<std::byte*, std::byte*>, 4> HbpHook::targetHookPairs{ { { nullptr, nullptr }, { nullptr, nullptr }, { nullptr, nullptr }, { nullptr, nullptr } } };
     PVOID HbpHook::vehHandle = nullptr;
 
     void HbpHook::Enable(bool state) {
         if (state) {
-            // Check to ensure that HbpHook is not already being used to hook the address
+             // Avoid duplicating hooks for the same target address.
             auto iter{ std::find_if(targetHookPairs.begin(), targetHookPairs.end(), [this](const std::pair<std::byte*, std::byte*>& targetHookPair) {
                 return targetHookPair.first == Target();
             }) };
@@ -77,7 +77,7 @@ namespace Pl {
                 targetHookPairs[trace->DebugRegister()] = std::pair<std::byte*, std::byte*>(nullptr, nullptr);
                 trace = nullptr;
             }
-            // Check to see if no more hooks are set and the veh may be removed
+            // Remove the VEH only after the final active hardware-breakpoint hook is cleared.
             auto count{
                 std::accumulate(targetHookPairs.begin(), targetHookPairs.end(), 0, [](size_t count, const std::pair<std::byte*, std::byte*>& targetHookPair) {
                     return count + (targetHookPair.first) ? 1 : 0;

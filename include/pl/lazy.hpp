@@ -28,11 +28,25 @@
 #include <utility>
 
 namespace Pl {
+    /// <summary>
+    /// Resolves a procedure address from an already loaded module.
+    /// </summary>
+    /// <typeparam name='Function'>The function signature type to cast the resolved export to.</typeparam>
+    /// <param name='library'>The loaded module handle that exports the target procedure.</param>
+    /// <param name='procName'>The exported procedure name.</param>
+    /// <returns>The typed function pointer, or <c>nullptr</c> if resolution fails.</returns>
     template<typename Function>
     inline auto LazyLoad(HMODULE library, const std::string& procName) {
         return (library) ? reinterpret_cast<Function*>(GetProcAddress(library, procName.data())) : nullptr;
     }
 
+    /// <summary>
+    /// Loads a module by name and resolves a procedure address from it.
+    /// </summary>
+    /// <typeparam name='Function'>The function signature type to cast the resolved export to.</typeparam>
+    /// <param name='libraryName'>The module name (for example, <c>L"ntdll.dll"</c>).</param>
+    /// <param name='procName'>The exported procedure name.</param>
+    /// <returns>A pair containing the module handle and resolved function pointer (or <c>nullptr</c>).</returns>
     template<typename Function>
     [[nodiscard]] inline std::pair<HMODULE, Function*> LazyLoad(const std::wstring& libraryName, const std::string& procName) {
         auto library{ LoadLibraryW(libraryName.data()) };
