@@ -54,22 +54,24 @@ namespace Pl {
         if (VerifyImage(pe)) {
             // Allocate memory for the image
             *mappedSize = pe.NtHeaders()->OptionalHeader.SizeOfImage;
-            *baseAddress = reinterpret_cast<std::byte*>(VirtualAlloc(nullptr, *mappedSize, MEM_COMMIT, PAGE_READWRITE));
-            // Copy the module headers and update the permission of its memory region
-            auto sectionCount{ pe.PeHeader()->NumberOfSections };
-            auto sizeOfHeaders{ (reinterpret_cast<const std::byte*>(pe.SectionHeaders()) - pe.base) + (sizeof(IMAGE_SECTION_HEADER) * sectionCount) };
-            std::memcpy(*baseAddress, bytes.data(), sizeOfHeaders);
-            VirtualProtect(*baseAddress, sizeof(sizeOfHeaders), PAGE_READONLY, nullptr);
-            // Copy each module section and update the permission of the section's memory region
-            for (size_t index{ 0 }; index < sectionCount; index++) {
-                auto sectionHeader{ pe.SectionHeaders()[index] };
-                if (sectionHeader.PointerToRawData) {
-                    auto virtualAddress{ *baseAddress + sectionHeader.VirtualAddress };
-                    std::memcpy(virtualAddress, pe.base + sectionHeader.PointerToRawData, sectionHeader.SizeOfRawData);
-                    VirtualProtect(virtualAddress, sectionHeader.Misc.VirtualSize, GetProtection(sectionHeader.Characteristics), nullptr);
+            *baseAddress = reinterpret_cast<std::byte*>(VirtualAlloc(nullptr, *mappedSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));
+            if (*baseAddress) {
+                // Copy the module headers and update the permission of its memory region
+                auto sectionCount{ pe.PeHeader()->NumberOfSections };
+                auto sizeOfHeaders{ (reinterpret_cast<const std::byte*>(pe.SectionHeaders()) - pe.base) + (sizeof(IMAGE_SECTION_HEADER) * sectionCount) };
+                std::memcpy(*baseAddress, bytes.data(), sizeOfHeaders);
+                VirtualProtect(*baseAddress, sizeof(sizeOfHeaders), PAGE_READONLY, nullptr);
+                // Copy each module section and update the permission of the section's memory region
+                for (size_t index{ 0 }; index < sectionCount; index++) {
+                    auto sectionHeader{ pe.SectionHeaders()[index] };
+                    if (sectionHeader.PointerToRawData) {
+                        auto virtualAddress{ *baseAddress + sectionHeader.VirtualAddress };
+                        std::memcpy(virtualAddress, pe.base + sectionHeader.PointerToRawData, sectionHeader.SizeOfRawData);
+                        VirtualProtect(virtualAddress, sectionHeader.Misc.VirtualSize, GetProtection(sectionHeader.Characteristics), nullptr);
+                    }
                 }
+                succeeded = true;
             }
-            succeeded = true;
         }
         return succeeded;
     }
@@ -77,7 +79,7 @@ namespace Pl {
     bool VerifyImage(const Pl::Pe& pe) {
         // Verify the header signatures
         if (pe.DosHeader()->e_magic == pe.FileSignature() && pe.NtHeaders()->Signature == pe.NtHeadersSignature()) {
-            if (~pe.PeHeader()->SizeOfOptionalHeader || pe.OptionalHeader()->Magic == pe.OptionalHeaderSignature()) {
+            if (!pe.PeHeader()->SizeOfOptionalHeader || pe.OptionalHeader()->Magic == pe.OptionalHeaderSignature()) {
                 // Verify that the image is not a DOS application with a 32-bit portion
                 if (pe.PeHeader()->Machine || pe.PeHeader()->SizeOfOptionalHeader) {
                     // Verify that it is an executable image
