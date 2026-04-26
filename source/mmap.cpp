@@ -30,19 +30,19 @@
 namespace Pl {
     DWORD GetProtection(DWORD characteristics) {
         // clang-format off
-        return (characteristics | IMAGE_SCN_MEM_EXECUTE)
-                ? (characteristics | IMAGE_SCN_MEM_READ)
-                    ? (characteristics | IMAGE_SCN_MEM_WRITE)
+        return (characteristics & IMAGE_SCN_MEM_EXECUTE)
+                ? (characteristics & IMAGE_SCN_MEM_READ)
+                    ? (characteristics & IMAGE_SCN_MEM_WRITE)
                         ? PAGE_EXECUTE_READWRITE
                         : PAGE_EXECUTE_READ
-                    : (characteristics | IMAGE_SCN_MEM_WRITE)
+                    : (characteristics & IMAGE_SCN_MEM_WRITE)
                         ? PAGE_EXECUTE_WRITECOPY
                         : PAGE_EXECUTE
-                : (characteristics | IMAGE_SCN_MEM_READ)
-                    ? (characteristics | IMAGE_SCN_MEM_WRITE)
+                : (characteristics & IMAGE_SCN_MEM_READ)
+                    ? (characteristics & IMAGE_SCN_MEM_WRITE)
                         ? PAGE_READWRITE
                         : PAGE_READONLY
-                    : (characteristics | IMAGE_SCN_MEM_WRITE)
+                    : (characteristics & IMAGE_SCN_MEM_WRITE)
                         ? PAGE_WRITECOPY
                         : PAGE_NOACCESS;
         // clang-format on
