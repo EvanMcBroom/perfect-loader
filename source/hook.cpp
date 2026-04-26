@@ -80,7 +80,7 @@ namespace Pl {
             // Remove the VEH only after the final active hardware-breakpoint hook is cleared.
             auto count{
                 std::accumulate(targetHookPairs.begin(), targetHookPairs.end(), 0, [](size_t count, const std::pair<std::byte*, std::byte*>& targetHookPair) {
-                    return count + (targetHookPair.first) ? 1 : 0;
+                    return count + ((targetHookPair.first) ? 1 : 0);
                 })
             };
             applied = (count == 0) ? !RemoveVectoredExceptionHandler(vehHandle) : false;
