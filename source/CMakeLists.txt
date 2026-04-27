@@ -1,16 +1,14 @@
-target_sources(${PROJECT_NAME} PRIVATE
+target_sources(pl PRIVATE
     hook.cpp
     loader.cpp
     mmap.cpp
+    pl.cpp
 )
-target_link_libraries(${PROJECT_NAME} PUBLIC KtmW32.lib)
+target_link_libraries(pl_shared PUBLIC KtmW32.lib)
+target_link_libraries(pl_static PUBLIC KtmW32.lib)
 
-target_sources(${CLIB} PRIVATE pl.cpp)
-
-if (${MAIN_PROJECT})
+if (${CMAKE_PROJECT_NAME} STREQUAL ${PROJECT_NAME})
     target_sources(run PRIVATE run.cpp)
-    target_link_libraries(run PRIVATE ${PROJECT_NAME})
 
     target_sources(testdll PRIVATE dllmain.cpp)
-    target_link_libraries(testdll PRIVATE ${PROJECT_NAME})
 endif()

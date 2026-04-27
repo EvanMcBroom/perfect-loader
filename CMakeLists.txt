@@ -1,25 +1,28 @@
 cmake_minimum_required(VERSION 3.24.0)
 project(perfect-loader
-    VERSION "1.0"
+    VERSION "2.0"
     DESCRIPTION "A perfect loader implementation"
     HOMEPAGE_URL "https://github.com/EvanMcBroom/perfect-loader"
     LANGUAGES C CXX
 )
-if (${CMAKE_PROJECT_NAME} STREQUAL ${PROJECT_NAME})
-    set(MAIN_PROJECT TRUE)
-    set(CLIB pl)
-else()
-    set(MAIN_PROJECT FALSE)
-    set(PROJECT_NAME "library_pl++")
-    set(CLIB library_pl)
-endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-add_library(${PROJECT_NAME} STATIC)
-target_sources(${PROJECT_NAME} PRIVATE
+# Define an object library to build equivalent shared and static libraries
+add_library(pl OBJECT)
+set_property(TARGET pl PROPERTY POSITION_INDEPENDENT_CODE 1)
+target_include_directories(pl PUBLIC include)
+add_library(pl_shared SHARED $<TARGET_OBJECTS:pl>)
+add_library(pl_static STATIC $<TARGET_OBJECTS:pl>)
+set_target_properties(pl_shared PROPERTIES OUTPUT_NAME pl)
+set_target_properties(pl_static PROPERTIES OUTPUT_NAME pl)
+target_include_directories(pl_shared PUBLIC include)
+target_include_directories(pl_static PUBLIC include)
+
+target_sources(pl PRIVATE
+    include/perfect_loader.h
     include/perfect_loader.hpp
     include/pl/hook.hpp
     include/pl/lazy.hpp
@@ -27,18 +30,12 @@ target_sources(${PROJECT_NAME} PRIVATE
     include/pl/pe.hpp
     include/pl/types.hpp
 )
-target_include_directories(${PROJECT_NAME} PUBLIC include)
 
-add_library(${CLIB} SHARED)
-target_sources(${CLIB} PRIVATE include/perfect_loader.h)
-target_link_libraries(${CLIB} PRIVATE ${PROJECT_NAME})
-
-if (${MAIN_PROJECT})
+if (${CMAKE_PROJECT_NAME} STREQUAL ${PROJECT_NAME})
     add_executable(run)
-    target_link_libraries(run PRIVATE ${CLIB} ${PROJECT_NAME})
+    target_link_libraries(run PRIVATE pl_static)
 
     add_library(testdll SHARED)
-    target_link_libraries(testdll PRIVATE ${PROJECT_NAME})
 endif()
 
 add_subdirectory(source)
