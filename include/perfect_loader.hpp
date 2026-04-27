@@ -151,7 +151,8 @@ namespace Pl {
         return (NT_SUCCESS(LazyLdrLockLoaderLock(0, nullptr, &cookie))) ? cookie : 0;
     }
 
-    /// <summary>Overwrites the header data with the starting bytes of the specified file.</summary>
+    /// <summary>Overwrites header data with the starting bytes of the specified file.</summary>
+    /// <param name='peBase'>The address of the start of the module.</param>
     /// <param name='fileName'>The name of a file whose bytes should be used to overwrite the headers.</param>
     bool OverwriteHeaders(std::byte* peBase, const std::wstring& fileName);
 

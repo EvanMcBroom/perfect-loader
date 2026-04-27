@@ -25,7 +25,6 @@
 
 #include "pl/mmap.hpp"
 #include "pl/pe.hpp"
-#include <KtmW32.h>
 
 namespace Pl {
     DWORD GetProtection(DWORD characteristics) {

@@ -128,7 +128,7 @@ namespace Pl {
 
     private:
         std::byte* address;
-        size_t reg;
+        size_t reg{ 0 };
         bool set{ false };
     };
     

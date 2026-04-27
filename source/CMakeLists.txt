@@ -1,4 +1,6 @@
 target_sources(pl PRIVATE
+    appcompat.cpp
+    evasion.cpp
     hook.cpp
     loader.cpp
     mmap.cpp
