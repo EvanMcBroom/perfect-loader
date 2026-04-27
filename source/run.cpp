@@ -80,15 +80,18 @@ std::wstring FindUsableDll(const std::wstring& searchDir) {
 
 std::vector<std::byte> ReadFile(const std::wstring& path) {
     std::ifstream file{ path, std::ios_base::in | std::ios::binary };
-    // Get it's size
-    file.seekg(0, file.end);
-    int size = file.tellg();
-    file.seekg(0, file.beg);
-    // Then read it
-    std::vector<std::byte> bytes(size);
-    file.read(reinterpret_cast<char*>(bytes.data()), size);
-    bytes.resize(file.tellg());
-    return bytes;
+    if (file) {
+        // Get it's size
+        file.seekg(0, file.end);
+        int size = file.tellg();
+        file.seekg(0, file.beg);
+        // Then read it
+        std::vector<std::byte> bytes(size);
+        file.read(reinterpret_cast<char*>(bytes.data()), size);
+        bytes.resize(file.tellg());
+        return bytes;
+    }
+    return {};
 }
 
 /// <summary>
@@ -102,11 +105,19 @@ std::vector<std::byte> ReadFile(const std::wstring& path) {
 int wmain(int argc, wchar_t** argv) {
     if (argc > 1) {
         auto filePath{ FindUsableDll(L"C:\\Windows\\System32") };
-        auto bytes{ ReadFile(argv[1]) };
-        auto library{ Pl::LoadLibrary(filePath, bytes, Pl::UseHbp) };
-        std::wcout << L"Loaded module at address: 0x" << library << std::endl;
-        std::wcout << L"Waiting for user input to exit..." << std::endl;
-        (void)std::getchar();
+        if (!filePath.empty()) {
+            auto bytes{ ReadFile(argv[1]) };
+            if (!bytes.empty()) {
+                auto library{ Pl::LoadLibrary(filePath, bytes, Pl::UseHbp) };
+                std::wcout << L"Loaded module at address: 0x" << library << std::endl;
+                std::wcout << L"Waiting for user input to exit..." << std::endl;
+                (void)std::getchar();
+            } else {
+                std::wcerr << L"Could not read the file to load." << std::endl;
+            }
+        } else {
+            std::wcerr << L"Could not find a usable path to pass to LoadLibrary." << std::endl;
+        }
     } else {
         std::wcout << argv[0] << L" <pe to load>" << std::endl;
     }
