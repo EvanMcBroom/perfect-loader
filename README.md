@@ -32,7 +32,7 @@ This approach is called section hollowing and it is not affected by the Windows 
 
 - Manual mapping
 - Module doppelgänging
-- Section holloing
+- Section hollowing
 
 **Hook methods**
 
