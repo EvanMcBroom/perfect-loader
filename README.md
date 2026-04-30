@@ -32,7 +32,7 @@ This approach is called module or section hollowing and it is not affected by th
 
 - Manual mapping
 - Module doppelgänging
-- Section hollowing
+- Module/section hollowing
 
 **Hook methods**
 
