@@ -75,4 +75,4 @@ The GUI utility requires Internet access during CMake's generate step to downloa
 To disable building the GUI, you may specify `-D=PL_BUILD_GUI=OFF` when generating build files.
 
 Other CMake projects may use perfect loader by calling `include` on this directory from an overarching project's `CMakeLists.txt` files.
-Doing so will add the static library and the shared library with the C API as CMake targets in the overarching project but will not add the `run` utility or the `testdll` library.
+Doing so will add the static library and the shared library with the C API as CMake targets in the overarching project but will not add the `gui` utility, `run` utility, or the `testdll` library.
