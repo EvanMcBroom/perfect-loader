@@ -1,0 +1,5 @@
+#include "winres.h"
+
+#define ICON_GEAR_SOLID 101
+
+ICON_GEAR_SOLID ICON "gui_gear_solid.ico" // fontawesome: fa-solid fa-gear

@@ -33,6 +33,15 @@ namespace Pl {
     DWORD GetProtection(DWORD characteristics);
 
     /// <summary>
+    /// Maps the provided module bytes as an executable image at baseAddress.
+    /// The memory region for baseAddress must be protected at PAGE_READWRITE or an equivalent protection.
+    /// </summary>
+    /// <param name='baseAddress'>Pointer to where to map module.</param>
+    /// <param name='bytes'>The bytes of the module to map.</param>
+    /// <returns>Returns a bool value to indicate if the module was successfully mapped.</returns>
+    bool MapModule(std::byte* baseAddress, const std::vector<std::byte>& bytes);
+
+    /// <summary>
     /// Maps the provided module bytes as an executable image in the address space of the calling process.
     /// </summary>
     /// <param name='bytes'>The bytes of the module to map.</param>

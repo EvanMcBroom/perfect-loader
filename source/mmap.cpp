@@ -47,6 +47,31 @@ namespace Pl {
         // clang-format on
     }
 
+    bool MapModule(std::byte* baseAddress, const std::vector<std::byte>& bytes) {
+        Pl::Pe pe{ bytes.data() };
+        // Copy the module headers and update the permission of its memory region
+        auto sectionCount{ pe.PeHeader()->NumberOfSections };
+        auto sizeOfHeaders{ (reinterpret_cast<const std::byte*>(pe.SectionHeaders()) - pe.base) + (sizeof(IMAGE_SECTION_HEADER) * sectionCount) };
+        std::memcpy(baseAddress, bytes.data(), sizeOfHeaders);
+        DWORD protection;
+        if (!VirtualProtect(baseAddress, sizeof(sizeOfHeaders), PAGE_READONLY, &protection)) {
+            return false;
+        }
+        // Copy each module section and update the permission of the section's memory region
+        for (size_t index{ 0 }; index < sectionCount; index++) {
+            auto sectionHeader{ pe.SectionHeaders()[index] };
+            if (sectionHeader.PointerToRawData) {
+                auto virtualAddress{ baseAddress + sectionHeader.VirtualAddress };
+                std::memcpy(virtualAddress, pe.base + sectionHeader.PointerToRawData, sectionHeader.SizeOfRawData);
+                DWORD protection;
+                if (!VirtualProtect(virtualAddress, sectionHeader.Misc.VirtualSize, GetProtection(sectionHeader.Characteristics), &protection)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     bool MapModule(const std::vector<std::byte>& bytes, std::byte** baseAddress, size_t* mappedSize) {
         bool succeeded{ false };
         Pl::Pe pe{ bytes.data() };
@@ -55,21 +80,7 @@ namespace Pl {
             *mappedSize = pe.NtHeaders()->OptionalHeader.SizeOfImage;
             *baseAddress = reinterpret_cast<std::byte*>(VirtualAlloc(nullptr, *mappedSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));
             if (*baseAddress) {
-                // Copy the module headers and update the permission of its memory region
-                auto sectionCount{ pe.PeHeader()->NumberOfSections };
-                auto sizeOfHeaders{ (reinterpret_cast<const std::byte*>(pe.SectionHeaders()) - pe.base) + (sizeof(IMAGE_SECTION_HEADER) * sectionCount) };
-                std::memcpy(*baseAddress, bytes.data(), sizeOfHeaders);
-                VirtualProtect(*baseAddress, sizeof(sizeOfHeaders), PAGE_READONLY, nullptr);
-                // Copy each module section and update the permission of the section's memory region
-                for (size_t index{ 0 }; index < sectionCount; index++) {
-                    auto sectionHeader{ pe.SectionHeaders()[index] };
-                    if (sectionHeader.PointerToRawData) {
-                        auto virtualAddress{ *baseAddress + sectionHeader.VirtualAddress };
-                        std::memcpy(virtualAddress, pe.base + sectionHeader.PointerToRawData, sectionHeader.SizeOfRawData);
-                        VirtualProtect(virtualAddress, sectionHeader.Misc.VirtualSize, GetProtection(sectionHeader.Characteristics), nullptr);
-                    }
-                }
-                succeeded = true;
+                succeeded = MapModule(*baseAddress, bytes);
             }
         }
         return succeeded;

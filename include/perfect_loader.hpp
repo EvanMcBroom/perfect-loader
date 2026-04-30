@@ -27,6 +27,7 @@
 #endif
 #include <Windows.h>
 
+#include "perfect_loader.h"
 #include "pl/hook.hpp"
 #include "pl/lazy.hpp"
 #include "pl/mmap.hpp"
@@ -41,18 +42,16 @@
 #undef LoadLibrary
 
 namespace Pl {
-    /// <summary>
-    /// Flags that control loader behavior and post-processing when loading a module from memory.
-    /// </summary>
-    enum LoadFlags {
+    enum RedirectorFlags {
         NoFlags = 0x00, // No flags
-        NoHeaders = 0x01, // Remove image headers
-        NoModList = 0x02, // Remove from the loader data table entries (e.g., the module list)
-        NoNotifs = 0x04, // Remove notifications of new library loads before loading the library
-        NoThdCall = 0x08, // Disable thread attach and detachs callbacks
-        OvrHdrs = 0x10, // Overwrite the in-memory headers with the headers of the specified file
-        UseHbp = 0x20, // Hook functions using hardware breakpoints
-        UseTxf = 0x40, // Map the module in a transaction
+        // Load options (default: manually map in allocated memory)
+        UseTxf = 0x01, // Map the module in a file transaction
+        UseSec = 0x02, // Map the module in a hollowed section
+        // Hook options (default: detour patching)
+        UseHbp = 0x10, // Hook functions using hardware breakpoints
+#if defined(_M_AMD64) && !defined(_M_ARM64EC)
+        UsePic = 0x20, // Hook functions using process instrumentation callbacks (e.g. Nirvana hooks)
+#endif
         AllFlags = 0xFF // Enable everything
     };
 
@@ -64,7 +63,7 @@ namespace Pl {
         /// </summary>
         /// <param name='fileName'>The on-disk module path used as the loader lookup target. Some <paramref name="flags"/> allow this to be any file.</param>
         /// <param name='bytes'>The module bytes to supply when the target path is loaded.</param>
-        /// <param name='flags'>Optional loader behavior flags from <see cref="LoadFlags"/>.</param>
+        /// <param name='flags'>Optional loader behavior flags from <see cref="RedirectorFlags"/>.</param>
         /// <param name='modListName'>Optional alternate module-list name used when <see cref="UseTxf"/> is enabled.</param>
         LoadLibraryRedirector(std::wstring fileName, const std::vector<std::byte>& bytes, DWORD flags = 0, const std::wstring& modListName = L"");
         /// <summary>
@@ -86,10 +85,6 @@ namespace Pl {
         static NTSTATUS NTAPI NtMapViewOfSectionHook(HANDLE SectionHandle, HANDLE ProcessHandle, PVOID* BaseAddress, ULONG_PTR ZeroBits, SIZE_T CommitSize, PLARGE_INTEGER SectionOffset, PSIZE_T ViewSize, SECTION_INHERIT InheritDisposition, ULONG AllocationType, ULONG Win32Protect);
         static NTSTATUS NTAPI NtQueryVirtualMemoryHook(HANDLE ProcessHandle, PVOID BaseAddress, MEMORY_INFORMATION_CLASS MemoryInformationClass, PVOID MemoryInformation, SIZE_T MemoryInformationLength, PSIZE_T ReturnLength);
     };
-
-    /// <summary>Disable thread attach and detachs callbacks for a module.</summary>
-    /// <param name='peBase'>The address of the start of the module.</param>
-    bool DisableThreadCallbacks(std::byte* peBase);
 
     /// <summary>Get the address of the LDR_DATA_TABLE_ENTRY data for a module.</summary>
     /// <param name='peBase'>The address of the start of the module.</param>
@@ -151,12 +146,12 @@ namespace Pl {
         return (NT_SUCCESS(LazyLdrLockLoaderLock(0, nullptr, &cookie))) ? cookie : 0;
     }
 
-    /// <summary>Overwrites header data with the starting bytes of the specified file.</summary>
+    /// <summary>Overwrites module headers with the starting bytes of the specified file (ex. another dll).</summary>
     /// <param name='peBase'>The address of the start of the module.</param>
     /// <param name='fileName'>The name of a file whose bytes should be used to overwrite the headers.</param>
     bool OverwriteHeaders(std::byte* peBase, const std::wstring& fileName);
 
-    /// <summary>Removes all callbacks registered using LdrRegisterDllNotification.</summary>
+    /// <summary>Removes all callbacks registered using LdrRegisterDllNotification for new library loads.</summary>
     /// <remarks>
     ///     The callback list is identified as described by Michael Maltsev's LdrDllNotificationHook project:
     ///     https://github.com/m417z/LdrDllNotificationHook
@@ -167,7 +162,17 @@ namespace Pl {
     /// <param name='peBase'>The address of the start of the module.</param>
     bool RemoveHeaders(std::byte* peBase);
 
-    /// <summary>Removes the module from each LDR_DATA_TABLE_ENTRY list and the HashLinks list.</summary>
+    /// <summary>Removes any instrumentation callback that is registered the process.</summary>
+    bool RemoveNirvanaCallbacks();
+
+    /// <summary>Removes any registered vectored exception handlers.</summary>
+    /// <remarks>
+    ///     The handler list is identified as described by Peter Winter-Smith's POC:
+    ///     https://github.com/rad9800/misc/blob/main/bypasses/ClearVeh.c
+    /// </remarks>
+    bool RemoveVectoredExceptionHandlers();
+
+    /// <summary>Removes the module from the loader data table entries (e.g., the module list) and the hash links list.</summary>
     /// <param name='peBase'>The address of the start of the module.</param>
     bool UnlinkModule(std::byte* peBase);
 

@@ -1,6 +1,12 @@
 #define UNICODE
 #include "perfect_loader.hpp"
     
+namespace {
+    LONG NTAPI VehHandler(struct _EXCEPTION_POINTERS*) {
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+}
+
 namespace Pl {
     bool DisableThreadCallbacks(std::byte* peBase) {
         __try {
@@ -77,6 +83,57 @@ namespace Pl {
         } __except (EXCEPTION_EXECUTE_HANDLER) {
         }
         return false;
+    }
+
+    bool RemoveNirvanaCallbacks() {
+#if defined(_M_AMD64) && !defined(_M_ARM64EC)
+        PROCESS_INSTRUMENTATION_CALLBACK_INFORMATION picInfo;
+        picInfo.Callback = nullptr;
+        picInfo.Version = 0;
+        picInfo.Reserved = 0;
+        PL_LAZY_LOAD_NATIVE_PROC(NtSetInformationProcess);
+        return NT_SUCCESS(LazyNtSetInformationProcess(GetCurrentProcess(), ProcessInstrumentationCallback, &picInfo, sizeof(picInfo)));
+#else
+        return true;
+#endif
+    }
+
+    bool RemoveVectoredExceptionHandlers() {
+        PL_LAZY_LOAD_NATIVE_PROC(RtlAddVectoredExceptionHandler);
+        bool succeeded{ false };
+        auto vehHandle{ LazyRtlAddVectoredExceptionHandler(TRUE, reinterpret_cast<PVECTORED_EXCEPTION_HANDLER>(VehHandler)) };
+        if (vehHandle) {
+            auto target{ LPVOID(PLIST_ENTRY(vehHandle)->Flink) };
+            std::byte* ntdll;
+            if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, L"ntdll.dll", (HMODULE*)&ntdll)) {
+                Pe pe{ ntdll };
+                auto sectionCount{ pe.PeHeader()->NumberOfSections };
+                auto sizeOfHeaders{ (reinterpret_cast<const std::byte*>(pe.SectionHeaders()) - ntdll) + (sizeof(IMAGE_SECTION_HEADER) * sectionCount) };
+                bool found{ false };
+                for (size_t index{ 0 }; !found && index < sectionCount; index++) {
+                    auto sectionHeader{ pe.SectionHeaders()[index] };
+                    if (!std::string(".data").compare(reinterpret_cast<const char*>(sectionHeader.Name))) {
+                        auto dataAddress{ ntdll + sectionHeader.VirtualAddress };
+                        auto dataSize{ sectionHeader.Misc.VirtualSize };
+                        while (target != vehHandle) {
+                            if (target >= dataAddress && target <= ((PVOID*)dataAddress + dataSize)) {
+                                found = true;
+                                break;
+                            }
+                            target = LPVOID(PLIST_ENTRY(target)->Flink);
+                        }
+                    }
+                }
+            }
+            PL_LAZY_LOAD_NATIVE_PROC(RtlRemoveVectoredExceptionHandler);
+            LazyRtlRemoveVectoredExceptionHandler(vehHandle);
+            auto ldrpVectorHandlerList{ PLIST_ENTRY(target) };
+            while (ldrpVectorHandlerList->Flink != ldrpVectorHandlerList) {
+                LazyRtlRemoveVectoredExceptionHandler(ldrpVectorHandlerList->Flink);
+            }
+            succeeded = true;
+        }
+        return succeeded;
     }
 
     bool UnlinkModule(std::byte* peBase) {

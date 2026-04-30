@@ -31,6 +31,8 @@
 #define STATUS_NOT_IMPLEMENTED     0xC0000002
 #define STATUS_NOT_SUPPORTED       0xC00000BB
 
+#define ProcessInstrumentationCallback 40
+
 namespace Pl {
     // Source: ntexapi.h from phnt
     typedef enum _HOT_PATCH_INFORMATION_CLASS {
@@ -53,6 +55,12 @@ namespace Pl {
         // ...
     } MEMORY_INFORMATION_CLASS;
 
+    typedef struct _PROCESS_INSTRUMENTATION_CALLBACK_INFORMATION {
+        ULONG Version;
+        ULONG Reserved;
+        PVOID Callback;
+    } PROCESS_INSTRUMENTATION_CALLBACK_INFORMATION, *PPROCESS_INSTRUMENTATION_CALLBACK_INFORMATION;
+
     typedef enum _SECTION_INFORMATION_CLASS {
         // ...
         SectionImageInformation = 1
@@ -60,7 +68,7 @@ namespace Pl {
     } SECTION_INFORMATION_CLASS;
 
     typedef enum _SECTION_INHERIT {
-        // ...
+        ViewShare = 1,
         ViewUnmap = 2
     } SECTION_INHERIT;
 
@@ -90,7 +98,7 @@ namespace Pl {
         };
         // ...
     } LDR_DATA_TABLE_ENTRY, *PLDR_DATA_TABLE_ENTRY;
-    
+
     typedef struct _LDRP_DLL_NOTIFICATION_BLOCK {
         LIST_ENTRY Links;
         PLDR_DLL_NOTIFICATION_FUNCTION NotificationFunction;
@@ -174,9 +182,12 @@ namespace Pl {
         HANDLE Mutant;
         PVOID ImageBaseAddress;
         Pl::PPEB_LDR_DATA Ldr;
+        RTL_USER_PROCESS_PARAMETERS* ProcessParameters;
+        PVOID SubSystemData;
+        PVOID ProcessHeap;
         // ...
     } PEB, *PPEB;
-    
+
     typedef struct tagVERHEAD {
         WORD wTotLen;
         WORD wValLen;
@@ -189,24 +200,25 @@ namespace Pl {
     /// The protected policy guid for RtlpAddVectoredHandler. The policy guid was
     /// first documented by redplait and its use when performing a VEH based hook
     /// was first demonstrated by Alex Short's (rbmm's) ARL project.
-    /// 
+    ///
     /// Protected policies were introduced in NT 6.3. They allow software to
     /// dynamically enable or disable a GUID identified policy for the current
     /// process which other software may query the value of and handle as needed.
-    /// 
+    ///
     /// The RtlpAddVectoredHandler policy sets whether VEH registration should be
     /// disabled within the current process. That may be seen in its use within
     /// eShims.dll. Some Microsoft software will identify uses of VEH and report
     /// an error if the RtlpAddVectoredHandler policy is enabled. Disabling this
     /// policy will allow VEH based hooking to be used without errors being
     /// reported by such software.
-    /// 
+    ///
     /// Sources:
     /// https://redplait.blogspot.com/2017/04/ntdll-protectedpolicies.html
     /// https://github.com/rbmm/ARL
     /// </summary>
     struct DECLSPEC_UUID("1FC98BCA-1BA9-4397-93F9-349EAD41E057") RtlpAddVectoredHandler;
 
+    // clang-format off
     [[maybe_unused]] NTSTATUS NTAPI LdrLockLoaderLock(ULONG Flags, ULONG* State, SIZE_T* Cookie);
     [[maybe_unused]] NTSTATUS NTAPI LdrRegisterDllNotification(ULONG Flags, PLDR_DLL_NOTIFICATION_FUNCTION NotificationFunction, PVOID Context, PVOID* Cookie);
     [[maybe_unused]] NTSTATUS NTAPI LdrUnlockLoaderLock(ULONG Flags, SIZE_T Cookie);
@@ -216,7 +228,12 @@ namespace Pl {
     [[maybe_unused]] NTSTATUS NTAPI NtMapViewOfSection(HANDLE SectionHandle, HANDLE ProcessHandle, PVOID* BaseAddress, ULONG_PTR ZeroBits, SIZE_T CommitSize, PLARGE_INTEGER SectionOffset, PSIZE_T ViewSize, SECTION_INHERIT InheritDisposition, ULONG AllocationType, ULONG Win32Protect);
     [[maybe_unused]] NTSTATUS NTAPI NtQuerySection(HANDLE SectionHandle, SECTION_INFORMATION_CLASS SectionInformationClass, PVOID SectionInformation, SIZE_T SectionInformationLength, PSIZE_T ReturnLength);
     [[maybe_unused]] NTSTATUS NTAPI NtQueryVirtualMemory(HANDLE ProcessHandle, PVOID BaseAddress, MEMORY_INFORMATION_CLASS MemoryInformationClass, PVOID MemoryInformation, SIZE_T MemoryInformationLength, PSIZE_T ReturnLength);
+    [[maybe_unused]] NTSTATUS NTAPI NtSetInformationProcess(HANDLE ProcessHandle, DWORD ProcessInformationClass, PVOID ProcessInformation, ULONG ProcessInformationLength);
+    [[maybe_unused]] NTSTATUS NTAPI NtUnmapViewOfSection(HANDLE ProcessHandle, PVOID BaseAddress);
+    [[maybe_unused]] PVOID    NTAPI RtlAddVectoredExceptionHandler(ULONG FirstHandler, PVECTORED_EXCEPTION_HANDLER VectoredHandler);
     [[maybe_unused]] NTSTATUS NTAPI RtlGetVersion(PRTL_OSVERSIONINFOW lpVersionInformation);
-    [[maybe_unused]] BOOL NTAPI RtlSetCurrentTransaction(HANDLE Transaction);
+    [[maybe_unused]] ULONG    NTAPI RtlRemoveVectoredExceptionHandler(PVOID VectoredHandlerHandle);
+    [[maybe_unused]] BOOL     NTAPI RtlSetCurrentTransaction(HANDLE Transaction);
     [[maybe_unused]] NTSTATUS NTAPI RtlSetProtectedPolicy(const GUID* PolicyGuid, SIZE_T PolicyValue, PSIZE_T OldPolicyValue);
+    // clang-format on
 }
