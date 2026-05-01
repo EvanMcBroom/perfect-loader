@@ -32,12 +32,12 @@ CallbackThunk proc
 
     thunk_body:
         ; Return early if InstrumentationCallbackDisabled is set to prevent recursion
-        mov rdx, gs:[2ech] ; rcx = TEB.InstrumentationCallbackDisabled
+        mov rdx, gs:[2ech] ; rdx = TEB.InstrumentationCallbackDisabled
         test rdx, rdx
         jnz epilogue
 
         ; Set InstrumentationCallbackDisabled
-        mov cl, 1
+        mov dl, 1
 		mov gs:[2ech], rdx ; TEB.InstrumentationCallbackDisabled = 1 (true)
 
         ; Set up the arguments for PicHandler
