@@ -20,7 +20,7 @@ To my knowledge, this is a novel approach to using transactions and I personally
 
 The third solution uses a similar method to CheckPointSW's [VectoredOverloading code](https://github.com/CheckPointSW/VectoredOverloading).
 The solution differs by hooking `NtCreateSection` to modify its input parameters and `NtMapViewOfSection` to hollow the mapped view of the section.
-This approach is called section hollowing and it is not affected by the Windows 11 24H2 loader changes that affect approach one.
+This approach is called module or section hollowing and it is not affected by the Windows 11 24H2 loader changes that affect approach one.
 [Alex Short](https://twitter.com/alexsho71327477) 
 [has a similar POC for the approach](https://github.com/rbmm/ARL) which is worth referencing.
 
@@ -32,7 +32,7 @@ This approach is called section hollowing and it is not affected by the Windows 
 
 - Manual mapping
 - Module doppelgänging
-- Section hollowing
+- Module/section hollowing
 
 **Hook methods**
 
