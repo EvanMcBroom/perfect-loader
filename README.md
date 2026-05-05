@@ -22,7 +22,8 @@ The third solution uses a similar method to CheckPointSW's [VectoredOverloading 
 The solution differs by hooking `NtCreateSection` to modify its input parameters and `NtMapViewOfSection` to hollow the mapped view of the section.
 This approach is called module or section hollowing and it is not affected by the Windows 11 24H2 loader changes that affect approach one.
 [Alex Short](https://twitter.com/alexsho71327477) 
-[has a similar POC for the approach](https://github.com/rbmm/ARL) which is worth referencing.
+[has a similar POC](https://github.com/rbmm/ARL/tree/bbe7888122ee556019026c6c6c8359cd16412368) that is worth referencing.
+Another example may be found in the [loader routines for the ZeroAccess toolkit](https://github.com/hfiref0x/ZeroAccess).
 
 ## Features
 
